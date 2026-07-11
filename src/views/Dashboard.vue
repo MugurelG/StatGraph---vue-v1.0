@@ -297,6 +297,20 @@ const exportDetailsPDF = () => {
   html2pdf().set(opt).from(element).save();
 };
 
+const exportChartPDF = () => {
+  const element = document.querySelector('.chart-container');
+  if (!element) return;
+
+  const opt = { 
+    margin: 10, 
+    filename: `Vizualizare_${currentView.value}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' } // Landscape pt chart
+  };
+  html2pdf().set(opt).from(element).save();
+};
+
 const exportPosturiPDF = () => {
   const element = document.getElementById('user-hr-section');
   const opt = { 
@@ -1272,6 +1286,13 @@ const handleDeleteAccount = async () => {
         <button @click="selectView('flow')" :class="{ active: currentView === 'flow' }">Graph</button>
         <button @click="selectView('sunburst')" :class="{ active: currentView === 'sunburst' }">Sunburst</button>
         <button @click="selectView('treemap')" :class="{ active: currentView === 'treemap' }">Treemap</button>
+           <button 
+          v-if="currentView !== 'flow'" 
+          @click="exportChartPDF" 
+          class="chart-export-btn"
+        >
+          📥 Exportă vizualizare
+        </button>
       </div>
     </div>
 
