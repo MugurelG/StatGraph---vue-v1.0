@@ -176,6 +176,8 @@ const dragOffset = ref({ x: 0, y: 0 });
 
 // --- VARIABILE PENTRU DRAWER UTILIZATOR ---
 const showProfilePanel = ref(false);
+const showRolePanel = ref(false);
+const selectedRoleData = ref(null);
 const selectedUserData = ref(null);
 const userHrData = ref([]);
 const userSourceData = ref([]);
@@ -200,28 +202,40 @@ const openUserDetails = async (node) => {
         observatii: row.observatii || ''
       }));
     } else {
-      userSourceData.value = [];
-    }
+            userSourceData.value = [];
+          }
 
-    // Aducem datele HR pentru acest nod
-    const { data, error } = await supabase
-      .from('date_joburi')
-      .select('*')
-      .eq('organogram_node_id', String(node.id));
-    
-    if (!error && data) {
-      userHrData.value = data.map(row => ({
-        functie: row.functie || '',
-        ocupate: row.pozitii_ocupate || 0,
-        vacante: row.pozitii_vacante || 0,
-        total: (row.pozitii_ocupate || 0) + (row.pozitii_vacante || 0),
-        statut: row.statut || 'Activ'
-      }));
-    } else {
-      userHrData.value = [];
-    }
-  }
-};
+          // Aducem datele HR pentru acest nod
+          const { data, error } = await supabase
+            .from('date_joburi')
+            .select('*')
+            .eq('organogram_node_id', String(node.id));
+          
+          if (!error && data) {
+            userHrData.value = data.map(row => ({
+              functie: row.functie || '',
+              ocupate: row.pozitii_ocupate || 0,
+              vacante: row.pozitii_vacante || 0,
+              total: (row.pozitii_ocupate || 0) + (row.pozitii_vacante || 0),
+              statut: row.statut || 'Activ'
+            }));
+          } else {
+            userHrData.value = [];
+          }
+        }
+        };
+
+        const handleDetailsClick = (node) => {
+          const nodeData = allNodesList.value.find(n => String(n.id) === String(node.id));
+          if (nodeData && nodeData.is_institution === false) {
+            selectedRoleData.value = nodeData;
+            showRolePanel.value = true;
+            showProfilePanel.value = false;
+          } else {
+            openUserDetails(node);
+          }
+        };
+
 
 // --- POP-UP STRUCTURĂ H.R. (Pasul 3) ---
 const showHrPopup = ref(false);
@@ -256,6 +270,11 @@ const closeProfilePanel = () => {
   showProfilePanel.value = false;
   selectedUserData.value = null;
   userHrData.value = [];
+};
+
+const closeRolePanel = () => {
+  showRolePanel.value = false;
+  selectedRoleData.value = null;
 };
 
 // --- FUNCȚII EXPORT PDF ---
@@ -323,6 +342,20 @@ const exportPosturiPDF = () => {
   html2pdf().set(opt).from(element).save();
 };
 
+const exportRolePDF = () => {
+  const element = document.getElementById('role-profile-pdf-section');
+  if (!element) return;
+  const opt = { 
+    margin: [10, 10, 10, 10], 
+    filename: `Profil_Rol_${selectedRoleData.value?.nume || 'rol'}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+  html2pdf().set(opt).from(element).save();
+};
+
 const adminAction = ref(null); // 'create', 'edit', sau null
 const adminFormData = ref({
   nume: '', 
@@ -336,7 +369,8 @@ const adminFormData = ref({
   rol: '',
   website:'',
   news: '',
-  relatie: ''
+  relatie: '',
+  is_institution: true
 });
 
 // Tabelul de jos (Date Personal)
@@ -669,7 +703,7 @@ watch(selectedAdminNode, (newNode) => {
 const handleAdminCreate = () => {
   if (!selectedAdminNode.value) return;
   adminAction.value = 'create';
-  adminFormData.value = { nume: '', tip_institutie: '', news: '', relatie: '' };
+    adminFormData.value = { nume: '', tip_institutie: '', news: '', relatie: '', is_institution: true }; 
   hrRows.value = []; // ADAUGAT: Golește rândurile vechi
     hrRows.value = []; 
   sourceRows.value = []; // ADAUGAT
@@ -690,7 +724,7 @@ const handleAdminEdit = async () => {
   
   const nodeData = allNodesList.value.find(n => String(n.id) === String(selectedAdminNode.value.id));
   if (nodeData) {
-    // Preluăm datele din COLOANELE REALE (nu din metadata)
+       // Preluăm datele din COLOANELE REALE (nu din metadata)
     adminFormData.value = {
       nume: nodeData.nume || nodeData.node_name || '',
       tip_institutie: nodeData.metadata?.tip || '',
@@ -700,15 +734,15 @@ const handleAdminEdit = async () => {
       program: nodeData.program || '',
       telefon: nodeData.telefon || '',
       email: nodeData.email || '',
-      email: nodeData.email || '',
-      news: nodeData.metadata?.news || '', // ADAUGAT
+      news: nodeData.metadata?.news || '',
       rol: nodeData.rol || '',
       website: nodeData.website || '',
       relatie: (() => {
         if (!nodeData.parent_id) return nodeData.metadata?.relatie_superioara || '';
         const parentNode = allNodesList.value.find(n => String(n.id) === String(nodeData.parent_id));
         return parentNode ? (parentNode.nume || parentNode.node_name) : '';
-      })()
+      })(),
+      is_institution: nodeData.is_institution ?? true // ADAUGAT AICI
     };
     imagePreview.value = nodeData.metadata?.imagine || null;
     
@@ -760,7 +794,8 @@ const saveAdminNode = async () => {
       rol: adminFormData.value.rol,
       website: adminFormData.value.website,
       // Păstrăm metadata doar pentru ce nu are coloană proprie
-      metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie }  
+            metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie }, 
+      is_institution: adminFormData.value.is_institution // ADAUGAT
     };
 
     const res = await supabase.from('organograms').insert([insertData]).select();
@@ -809,7 +844,8 @@ const saveAdminNode = async () => {
           telefon: adminFormData.value.telefon,
           email: adminFormData.value.email,
           rol: adminFormData.value.rol,
-          metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie } 
+          metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie },
+          is_institution: adminFormData.value.is_institution // ADAUGAT
         })
         .eq('id', nodeId)
         .select();
@@ -827,7 +863,8 @@ const saveAdminNode = async () => {
           email: adminFormData.value.email,
           rol: adminFormData.value.rol,
           website: adminFormData.value.website,
-          metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie }  
+          metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie },
+            is_institution: adminFormData.value.is_institution // ADAUGAT  
         })
         .eq('id', nodeId)
         .select();
@@ -1055,8 +1092,8 @@ function buildElements(list, rootId) {
     return 'node-national';
   };
 
-  const rootClass = getBaseClass(rootNode);
-  const rootSubCount = rootNode.children ? rootNode.children.length : 0;
+    const rootClass = rootNode.is_institution === false ? 'node-role' : getBaseClass(rootNode);
+      const rootSubCount = rootNode.children ? rootNode.children.length : 0;
 
   nodes.push({
     id: String(rootNode.id),
@@ -1069,9 +1106,9 @@ function buildElements(list, rootId) {
 
   if (rootNode.children && rootNode.children.length > 0) {
     rootNode.children.forEach((child) => {
-      const childClass = rootClass;
+      const childClass = child.is_institution === false ? 'node-role' : rootClass;
       const childSubCount = child.children ? child.children.length : 0;
-
+      
       nodes.push({
         id: String(child.id),
         label: child.nume || child.node_name,
@@ -1413,7 +1450,7 @@ const handleDeleteAccount = async () => {
                          <!-- INSIGNA NOUĂ: DETALII PENTRU UTILIZATOR -->
               <div 
                 class="details-badge" 
-                @click.stop="openUserDetails(nodeProps)"
+                @click.stop="handleDetailsClick(nodeProps)"
                 title="Vezi detalii și posturi"
               >
                 D
@@ -1622,6 +1659,11 @@ const handleDeleteAccount = async () => {
 
             <!-- 3. ROL (Dreapta) -->
             <div class="col-rol">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="adminFormData.is_institution" :disabled="isSavingNode" />
+                Este instituție de sine stătătoare
+              </label>
+              
               <label>Descriere rol</label>
               <textarea v-model="adminFormData.rol" placeholder="ex: Coordonarea și monitorizarea activităților..." :disabled="isSavingNode"></textarea>
             </div>
@@ -1786,6 +1828,20 @@ const handleDeleteAccount = async () => {
         <button class="btn-export-profile-pdf" @click="exportProfilePDF">Exportă Profil PDF</button>
       </div>
     </div>
+
+    const exportRolePDF = () => {
+  const element = document.getElementById('role-profile-pdf-section');
+  if (!element) return;
+  const opt = { 
+    margin: [10, 10, 10, 10], 
+    filename: `Profil_Rol_${selectedRoleData.value?.nume || 'rol'}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+  html2pdf().set(opt).from(element).save();
+};
       
         
               <div class="panel-body" id="user-profile-pdf-section">
@@ -1915,6 +1971,87 @@ const handleDeleteAccount = async () => {
         </div>
       </div>
     </div>
+    </transition>
+
+    <!-- PANOU PROFIL ROL (Apare DOAR la is_institution === false) -->
+    <transition name="slide-panel">
+      <div v-if="showRolePanel" class="panel-left">
+            <div class="panel-header">
+          <h1>Profil Rol</h1>
+          <button class="panel-close-btn" @click="closeRolePanel">✕</button>
+        </div>
+        
+        <div class="panel-body" id="role-profile-pdf-section">
+          
+          <!-- 1. Identitate Funcție -->
+          <div class="profile-section" v-if="selectedRoleData">
+            <div class="section-title">Identitate Funcție</div>
+            <div class="contact-grid">
+              <span class="c-label">Denumire funcție</span> <div class="c-value">{{ selectedRoleData.nume || '-' }}</div>
+              <span class="c-label">Cod COR</span> <div class="c-value">{{ selectedRoleData.metadata?.cod_cor || '-' }}</div>
+              <span class="c-label">Bază legală</span> <div class="c-value">{{ selectedRoleData.metadata?.baza_legala || '-' }}</div>
+              <span class="c-label">Reglementare funcție</span> <div class="c-value">{{ selectedRoleData.metadata?.reglementare || '-' }}</div>
+            </div>
+          </div>
+
+          <!-- 2. Descrierea Rolului -->
+          <div class="profile-section" v-if="selectedRoleData">
+            <div class="section-title">Descrierea Rolului</div>
+            <p style="font-size: 0.9rem; color: #334155; line-height: 1.6; margin: 0;">
+              {{ selectedRoleData.rol || 'Nu există descriere disponibilă.' }}
+            </p>
+          </div>
+
+          <!-- 3. Subordonat Ierarhic -->
+          <div class="profile-section" v-if="selectedRoleData">
+            <div class="section-title">Subordonat Ierarhic</div>
+            <div class="relation-box">
+              <div class="relation-label">Superior ierarhic:</div>
+              <div class="relation-value">{{ selectedRoleData.metadata?.relatie_superioara || 'Nu este specificat' }}</div>
+            </div>
+          </div>
+
+          <!-- 4. Sporuri / Indemnizații -->
+          <div class="profile-section" v-if="selectedRoleData">
+            <div class="section-title">Sporuri / Indemnizații / Alte venituri</div>
+            <div class="contact-grid" style="margin-bottom: 15px;">
+              <span class="c-label">Gradație / Treaptă</span> <div class="c-value">{{ selectedRoleData.metadata?.gradatie_treapta || '-' }}</div>
+            </div>
+            
+            <table class="sources-profile-table">
+              <thead>
+                <tr>
+                  <th>Nr. Crt.</th>
+                  <th>Denumire Spor / Indemnizație</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, index) in selectedRoleData.metadata?.sporuri || []" :key="index">
+                  <td style="text-align: center;">{{ index + 1 }}</td>
+                  <td>{{ row.nume || '-' }}</td>
+                </tr>
+                <tr v-if="!selectedRoleData.metadata?.sporuri || selectedRoleData.metadata.sporuri.length === 0">
+                  <td colspan="2" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate sporuri</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 5. Program Audiențe -->
+          <div class="profile-section" v-if="selectedRoleData">
+            <div class="section-title">Program Audiențe</div>
+            <div class="c-value" style="background: #f8fafc; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+              {{ selectedRoleData.program || 'Nu este specificat' }}
+            </div>
+          </div>
+
+        </div>
+
+        <!-- BUTON EXPORT PDF -->
+        <div class="profile-pdf-actions">
+          <button class="btn-export-profile-pdf" @click="exportRolePDF">Exportă Profil PDF</button>
+        </div>
+      </div>
     </transition>
    
         <!-- POP-UP TABEL STRUCTURĂ H.R. -->
@@ -2143,6 +2280,23 @@ AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
     -4px -4px 10px rgba(255, 255, 255, 0.15),
     inset -3px -3px 8px rgba(0, 0, 0, 0.3), 
     inset 3px 3px 8px rgba(100, 160, 255, 0.3) !important;
+}
+
+.node-role .custom-node-container {
+  background: linear-gradient(145deg, #fef9e7, #fdf1b8) !important;
+  border-radius: 25px !important;
+  border-color: #f5d060 !important;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.15), 
+    -2px -2px 6px rgba(255, 255, 255, 0.5), 
+    inset -2px -2px 4px rgba(0, 0, 0, 0.05),  
+    inset 2px 2px 4px rgba(255, 255, 255, 0.7) !important; 
+  
+  .node-label { 
+    color: #FF3F34 !important; 
+    text-shadow: none !important; 
+    font-size: 0.8rem !important; 
+  }
 }
 
 .vue-flow__node { transition: opacity 0.3s ease, transform 0.3s ease; }

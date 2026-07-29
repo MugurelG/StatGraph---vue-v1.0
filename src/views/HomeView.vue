@@ -19,10 +19,10 @@
           
           <div class="secondary-links">
             <!-- LINK-URI CU CULORI SPECIFICE -->
-            <a href="#" class="link-red" @click.prevent="openAuth(true)">Autentificare</a>
-            <a href="#" class="link-yellow" @click.prevent="openAuth(false)">Creează cont</a>
-            <a href="#" class="link-blue">Instrucțiuni</a>
             <a href="#" class="link-green">Disclaimer</a>
+            <a href="#" class="link-blue">Instrucțiuni</a>
+            <a href="#" class="link-yellow" @click.prevent="openAuth(false)">Creează cont</a>
+            <a href="#" class="link-red" @click.prevent="openAuth(true)">Autentificare</a>
           </div>
         </div>
       </div>
