@@ -1829,19 +1829,7 @@ const handleDeleteAccount = async () => {
       </div>
     </div>
 
-    const exportRolePDF = () => {
-  const element = document.getElementById('role-profile-pdf-section');
-  if (!element) return;
-  const opt = { 
-    margin: [10, 10, 10, 10], 
-    filename: `Profil_Rol_${selectedRoleData.value?.nume || 'rol'}.pdf`, 
-    image: { type: 'jpeg', quality: 0.98 }, 
-    html2canvas: { scale: 2, useCORS: true }, 
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-  };
-  html2pdf().set(opt).from(element).save();
-};
+
       
         
               <div class="panel-body" id="user-profile-pdf-section">
