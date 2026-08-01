@@ -177,6 +177,10 @@ const dragOffset = ref({ x: 0, y: 0 });
 // --- VARIABILE PENTRU DRAWER UTILIZATOR ---
 const showProfilePanel = ref(false);
 const showRolePanel = ref(false);
+const showDepartmentPanel = ref(false);
+const selectedDepartmentData = ref(null);
+const departmentProfileHrData = ref([]);
+
 const selectedRoleData = ref(null);
 const selectedUserData = ref(null);
 const userHrData = ref([]);
@@ -226,15 +230,24 @@ const openUserDetails = async (node) => {
         };
 
         const handleDetailsClick = (node) => {
-          const nodeData = allNodesList.value.find(n => String(n.id) === String(node.id));
-          if (nodeData && nodeData.is_institution === false) {
-            selectedRoleData.value = nodeData;
-            showRolePanel.value = true;
-            showProfilePanel.value = false;
-          } else {
-            openUserDetails(node);
-          }
-        };
+  const nodeData = allNodesList.value.find(n => String(n.id) === String(node.id));
+  if (nodeData && nodeData.is_department) {
+    selectedDepartmentData.value = nodeData;
+    departmentProfileHrData.value = nodeData.metadata?.hr_departament || [];
+    showDepartmentPanel.value = true;
+    showProfilePanel.value = false;
+    showRolePanel.value = false;
+  } else if (nodeData && nodeData.is_institution === false) {
+    selectedRoleData.value = nodeData;
+    showRolePanel.value = true;
+    showProfilePanel.value = false;
+    showDepartmentPanel.value = false;
+  } else {
+    openUserDetails(node);
+    showDepartmentPanel.value = false;
+    showRolePanel.value = false;
+  }
+};
 
 
 // --- POP-UP STRUCTURĂ H.R. (Pasul 3) ---
@@ -276,6 +289,12 @@ const closeRolePanel = () => {
   showRolePanel.value = false;
   selectedRoleData.value = null;
 };
+        const closeDepartmentPanel = () => {
+  showDepartmentPanel.value = false;
+  selectedDepartmentData.value = null;
+  departmentProfileHrData.value = [];
+};
+
 
 // --- FUNCȚII EXPORT PDF ---
 const exportProfilePDF = () => {
@@ -356,6 +375,41 @@ const exportRolePDF = () => {
   html2pdf().set(opt).from(element).save();
 };
 
+const exportDepartmentPDF = () => {
+  const element = document.getElementById('department-profile-pdf-section');
+  if (!element) return;
+
+  // 1. Clonăm elementul
+  const clonedElement = element.cloneNode(true);
+  clonedElement.style.position = 'static';
+  clonedElement.style.margin = '0';
+  clonedElement.style.padding = '20px';
+
+  // 2. Creăm un wrapper temporar invizibil pe ecran
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'absolute';
+  wrapper.style.left = '-9999px';
+  wrapper.style.top = '0';
+  wrapper.style.width = '600px';
+  wrapper.style.background = 'white';
+  wrapper.appendChild(clonedElement);
+  
+  document.body.appendChild(wrapper);
+
+  const opt = { 
+    margin: [10, 10, 10, 10], 
+    filename: `Profil_Departament_${selectedDepartmentData.value?.node_name || 'departament'}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  html2pdf().set(opt).from(clonedElement).save().finally(() => {
+    // 3. Ștergem wrapper-ul din DOM
+    document.body.removeChild(wrapper);
+  });
+};
+
 const adminAction = ref(null); // 'create', 'edit', sau null
 const adminFormData = ref({
   nume: '', 
@@ -370,7 +424,14 @@ const adminFormData = ref({
   website:'',
   news: '',
   relatie: '',
-  is_institution: true
+   is_institution: true,
+   is_department: false,
+   department_angajati: 0,
+  department_rof: '',
+  // Câmpuri specifice ROL
+  role_cod_cor: '',
+  role_baza_legala: '',
+  role_reglementare: ''
 });
 
 // Tabelul de jos (Date Personal)
@@ -391,6 +452,22 @@ const removeSourceRow = (index) => {
   sourceRows.value.splice(index, 1);
 };
 
+
+// Tabelul Sporuri pentru ROL
+const roleSporuriRows = ref([]);
+const departmentHrRows = ref([]);
+const addDepartmentHrRow = () => {
+  departmentHrRows.value.push({ functie: '', total: 0, ocupate: 0, vacante: 0, observatii: '' });
+};
+const removeDepartmentHrRow = (index) => {
+  departmentHrRows.value.splice(index, 1);
+};
+const addSporRow = () => {
+  roleSporuriRows.value.push({ nume: '' });
+};
+const removeSporRow = (index) => {
+  roleSporuriRows.value.splice(index, 1);
+};
 
 // Funcție ajutătoare pentru a aduce datele HR când edităm
 const fetchHrData = async (nodeId) => {
@@ -703,7 +780,7 @@ watch(selectedAdminNode, (newNode) => {
 const handleAdminCreate = () => {
   if (!selectedAdminNode.value) return;
   adminAction.value = 'create';
-    adminFormData.value = { nume: '', tip_institutie: '', news: '', relatie: '', is_institution: true }; 
+          adminFormData.value = { nume: '', tip_institutie: '', news: '', relatie: '', is_institution: true, is_department: false };  
   hrRows.value = []; // ADAUGAT: Golește rândurile vechi
     hrRows.value = []; 
   sourceRows.value = []; // ADAUGAT
@@ -742,16 +819,46 @@ const handleAdminEdit = async () => {
         const parentNode = allNodesList.value.find(n => String(n.id) === String(nodeData.parent_id));
         return parentNode ? (parentNode.nume || parentNode.node_name) : '';
       })(),
-      is_institution: nodeData.is_institution ?? true // ADAUGAT AICI
-    };
+              is_institution: nodeData.is_institution ?? true, // ADAUGAT AICI
+        is_department: nodeData.is_department ?? false,
+      };
+
+       imagePreview.value = nodeData.metadata?.imagine || null;
+
+            // Preluare date specifice ROL din metadata
+      adminFormData.value.role_cod_cor = nodeData.metadata?.cod_cor || '';
+      adminFormData.value.role_baza_legala = nodeData.metadata?.baza_legala || '';
+      adminFormData.value.role_reglementare = nodeData.metadata?.reglementare || '';
+      
+      if (nodeData.metadata?.sporuri && Array.isArray(nodeData.metadata.sporuri)) {
+        roleSporuriRows.value = nodeData.metadata.sporuri.map(s => ({ nume: s.nume || '' }));
+          } else {
+      roleSporuriRows.value = [];
+    }
+
+    // Preluare date specifice DEPARTAMENT din metadata
+    adminFormData.value.department_rof = nodeData.metadata?.rof || '';
+    
+    if (nodeData.metadata?.hr_departament && Array.isArray(nodeData.metadata.hr_departament)) {
+      departmentHrRows.value = nodeData.metadata.hr_departament.map(h => ({
+        functie: h.functie || '',
+        total: h.total || 0,
+        ocupate: h.ocupate || 0,
+        vacante: h.vacante || 0,
+        observatii: h.observatii || ''
+      }));
+    } else {
+      departmentHrRows.value = [];
+    }
+
     imagePreview.value = nodeData.metadata?.imagine || null;
     
     // Aducem datele HR din tabelul date_joburi
     await fetchHrData(selectedAdminNode.value.id);
-        await fetchHrData(selectedAdminNode.value.id);
-    await fetchSourceData(selectedAdminNode.value.id); // ADAUGAT
+    await fetchSourceData(selectedAdminNode.value.id);
   }
 };
+
 
 const saveAdminNode = async () => {
   if (!adminFormData.value.nume.trim()) {
@@ -794,8 +901,24 @@ const saveAdminNode = async () => {
       rol: adminFormData.value.rol,
       website: adminFormData.value.website,
       // Păstrăm metadata doar pentru ce nu are coloană proprie
-            metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie }, 
-      is_institution: adminFormData.value.is_institution // ADAUGAT
+            
+      metadata: { 
+        tip: adminFormData.value.tip_institutie, 
+        imagine: finalImageUrl, 
+        news: adminFormData.value.news, 
+        relatie_superioara: adminFormData.value.relatie,
+        // Salvare date ROL
+        cod_cor: adminFormData.value.role_cod_cor,
+        baza_legala: adminFormData.value.role_baza_legala,
+        reglementare: adminFormData.value.role_reglementare,
+        sporuri: roleSporuriRows.value,
+        // Salvare date DEPARTAMENT
+        rof: adminFormData.value.department_rof,
+        hr_departament: departmentHrRows.value
+      }, 
+
+      is_institution: adminFormData.value.is_institution,
+is_department: adminFormData.value.is_department
     };
 
     const res = await supabase.from('organograms').insert([insertData]).select();
@@ -845,12 +968,13 @@ const saveAdminNode = async () => {
           email: adminFormData.value.email,
           rol: adminFormData.value.rol,
           metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie },
-          is_institution: adminFormData.value.is_institution // ADAUGAT
+          is_institution: adminFormData.value.is_institution,
+is_department: adminFormData.value.is_department
         })
         .eq('id', nodeId)
         .select();
       error = res.error; data = res.data;
-    } else {
+          } else {
       // Dacă e SUB-NOD (tabelul organograms)
       const res = await supabase.from('organograms')
         .update({ 
@@ -863,8 +987,20 @@ const saveAdminNode = async () => {
           email: adminFormData.value.email,
           rol: adminFormData.value.rol,
           website: adminFormData.value.website,
-          metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie },
-            is_institution: adminFormData.value.is_institution // ADAUGAT  
+          metadata: { 
+            tip: adminFormData.value.tip_institutie, 
+            imagine: finalImageUrl, 
+            news: adminFormData.value.news, 
+            relatie_superioara: adminFormData.value.relatie,
+            cod_cor: adminFormData.value.role_cod_cor,
+            baza_legala: adminFormData.value.role_baza_legala,
+            reglementare: adminFormData.value.role_reglementare,
+            sporuri: roleSporuriRows.value,
+            rof: adminFormData.value.department_rof,
+            hr_departament: departmentHrRows.value
+          },
+          is_institution: adminFormData.value.is_institution,
+          is_department: adminFormData.value.is_department  
         })
         .eq('id', nodeId)
         .select();
@@ -934,8 +1070,21 @@ const saveAdminNode = async () => {
             email: adminFormData.value.email,
             rol: adminFormData.value.rol,
             website: adminFormData.value.website,
-            metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie } 
-          };
+                    metadata: { 
+        tip: adminFormData.value.tip_institutie, 
+        imagine: finalImageUrl, 
+        news: adminFormData.value.news, 
+        relatie_superioara: adminFormData.value.relatie,
+        // Salvare date ROL
+        cod_cor: adminFormData.value.role_cod_cor,
+        baza_legala: adminFormData.value.role_baza_legala,
+        reglementare: adminFormData.value.role_reglementare,
+        sporuri: roleSporuriRows.value,
+        // Salvare date DEPARTAMENT
+        rof: adminFormData.value.department_rof,
+        hr_departament: departmentHrRows.value
+      }, 
+      };
         }
       }
       elements.value = buildElements(allNodesList.value, currentRootId.value);
@@ -1092,9 +1241,14 @@ function buildElements(list, rootId) {
     return 'node-national';
   };
 
-    const rootClass = rootNode.is_institution === false ? 'node-role' : getBaseClass(rootNode);
-      const rootSubCount = rootNode.children ? rootNode.children.length : 0;
+        const getNodeClass = (node) => {
+      if (node.is_department) return 'node-department';
+      if (node.is_institution === false) return 'node-role';
+      return getBaseClass(node);
+    };
 
+    const rootClass = getNodeClass(rootNode);
+    const rootSubCount = rootNode.children ? rootNode.children.length : 0;
   nodes.push({
     id: String(rootNode.id),
     label: rootNode.nume || rootNode.node_name,
@@ -1106,7 +1260,7 @@ function buildElements(list, rootId) {
 
   if (rootNode.children && rootNode.children.length > 0) {
     rootNode.children.forEach((child) => {
-      const childClass = child.is_institution === false ? 'node-role' : rootClass;
+      const childClass = getNodeClass(child);
       const childSubCount = child.children ? child.children.length : 0;
       
       nodes.push({
@@ -1628,12 +1782,26 @@ const handleDeleteAccount = async () => {
 
       <!-- FORMULAR COMPLET (Apare DOAR la Creează sau Editează) -->
       <div v-else-if="adminAction === 'create' || adminAction === 'edit'" class="new-admin-form">
+             <!-- SELECTOR TIP NOD (Comun pentru toate formularele) -->
+        <div class="relation-admin-section" style="margin-bottom: 0; padding-bottom: 10px;">
+          <label style="margin-bottom: 10px;">Tip entitate</label>
+          <div style="display: flex; gap: 20px; margin-top: 5px;">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="adminFormData.is_institution" :disabled="isSavingNode" @change="$event.target.checked && (adminFormData.is_department = false)" />
+              Instituție
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="adminFormData.is_department" :disabled="isSavingNode" @change="$event.target.checked && (adminFormData.is_institution = false)" />
+              Compartiment / Departament
+            </label>
+          </div>
+        </div>
         
+              <!-- ==================== FORMULAR PENTRU INSTITUȚIE ==================== -->
+      <template v-if="adminFormData.is_institution">
         <!-- SECȚIUNEA 1: DETALII (3 coloane) -->
         <div class="form-top-half">
           <div class="details-grid-3col">
-            
-            <!-- 1. ETICHETE (Stânga) -->
             <div class="col-labels">
               <label>Denumire instituție *</label>
               <label>Acronim</label>
@@ -1644,8 +1812,6 @@ const handleDeleteAccount = async () => {
               <label>Telefon</label>
               <label>E-mail</label>
             </div>
-
-            <!-- 2. CÂMPURI (Mijloc) -->
             <div class="col-inputs">
               <input type="text" v-model="adminFormData.nume" placeholder="ex: Direcția Generală X" :disabled="isSavingNode" />
               <input type="text" v-model="adminFormData.acronim" placeholder="ex: DGS" :disabled="isSavingNode" />
@@ -1656,32 +1822,19 @@ const handleDeleteAccount = async () => {
               <input type="text" v-model="adminFormData.telefon" placeholder="ex: 021.123.456" :disabled="isSavingNode" />
               <input type="email" v-model="adminFormData.email" placeholder="ex: contact@institutie.ro" :disabled="isSavingNode" />
             </div>
-
-            <!-- 3. ROL (Dreapta) -->
             <div class="col-rol">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="adminFormData.is_institution" :disabled="isSavingNode" />
-                Este instituție de sine stătătoare
-              </label>
-              
+             
               <label>Descriere rol</label>
               <textarea v-model="adminFormData.rol" placeholder="ex: Coordonarea și monitorizarea activităților..." :disabled="isSavingNode"></textarea>
             </div>
-
           </div>
         </div>
 
         <!-- SECȚIUNEA: RELAȚII INSTITUȚIONALE -->
         <div class="relation-admin-section">
           <label>Instituție superioară (opțional)</label>
-          <input 
-            type="text" 
-            v-model="adminFormData.relatie" 
-            placeholder="ex: Guvernul României / Ministerul X" 
-            :disabled="isSavingNode" 
-          />
+          <input type="text" v-model="adminFormData.relatie" placeholder="ex: Guvernul României / Ministerul X" :disabled="isSavingNode" />
         </div>
-
 
         <!-- Upload Poza (Doar la Editare) -->
         <div v-if="adminAction === 'edit'" class="upload-row">
@@ -1693,17 +1846,11 @@ const handleDeleteAccount = async () => {
           <button class="remove-img-btn" @click="imagePreview = null; removeImage = true" title="Șterge">✕</button>
         </div>
 
- <!-- SECȚIUNEA: CE E NOU? -->
+        <!-- SECȚIUNEA: CE E NOU? -->
         <div class="news-admin-section">
           <label>Știri / Ce e nou?</label>
-          <textarea 
-            v-model="adminFormData.news" 
-            placeholder="Adaugă noutăți, linkuri sau anunțuri despre această instituție..." 
-            rows="3"
-            :disabled="isSavingNode"
-          ></textarea>
+          <textarea v-model="adminFormData.news" placeholder="Adaugă noutăți, linkuri sau anunțuri..." rows="3" :disabled="isSavingNode"></textarea>
         </div>
-
 
         <!-- SECȚIUNEA 2: DATE PERSONAL -->
         <div class="form-bottom-half">
@@ -1711,7 +1858,6 @@ const handleDeleteAccount = async () => {
             <span>Date Personal</span>
             <button class="add-hr-btn" @click="addHrRow" :disabled="isSavingNode">+ Adaugă Rând</button>
           </div>
-          
           <table class="hr-table">
             <thead>
               <tr>
@@ -1730,7 +1876,7 @@ const handleDeleteAccount = async () => {
                 <td><input type="text" v-model="row.functie" placeholder="Nume post" :disabled="isSavingNode" /></td>
                 <td><input type="number" v-model.number="row.ocupate" min="0" :disabled="isSavingNode" /></td>
                 <td><input type="number" v-model.number="row.vacante" min="0" :disabled="isSavingNode" /></td>
-               <td><input type="number" :value="(row.ocupate || 0) + (row.vacante || 0)" disabled /></td>
+                <td><input type="number" :value="(row.ocupate || 0) + (row.vacante || 0)" disabled /></td>
                 <td><input type="text" v-model="row.statut" placeholder="Activ / Link concurs" :disabled="isSavingNode" /></td>
                 <td><button class="remove-row-btn" @click="removeHrRow(index)" :disabled="isSavingNode">✕</button></td>
               </tr>
@@ -1741,14 +1887,12 @@ const handleDeleteAccount = async () => {
           </table>
         </div>
 
-
         <!-- SECȚIUNEA 3: SURSE INFORMAȚII -->
         <div class="form-bottom-half">
           <div class="hr-header">
             <span>Surse Informații</span>
             <button class="add-hr-btn" @click="addSourceRow" :disabled="isSavingNode">+ Adaugă Rand Info</button>
           </div>
-          
           <table class="hr-table">
             <thead>
               <tr>
@@ -1773,20 +1917,135 @@ const handleDeleteAccount = async () => {
             </tbody>
           </table>
         </div>
+      </template>
 
-        <!-- Mesaj și Butoane -->
-        <div v-if="adminMessage.text" :class="['admin-msg', adminMessage.type]">{{ adminMessage.text }}</div>
-        
-        <div class="form-buttons-new">
-          <button class="btn-save-3d" @click="saveAdminNode" :disabled="isSavingNode">
-            {{ isSavingNode ? 'Se salvează...' : 'Salvează' }}
-          </button>
-          <button class="btn-cancel-flat" @click="cancelAdminAction" :disabled="isSavingNode">
-            Anulează
-          </button>
+      <!-- ==================== FORMULAR PENTRU DEPARTAMENT ==================== -->
+      <template v-else-if="adminFormData.is_department">
+        <div class="form-top-half">
+          <div class="details-grid-3col">
+            <div class="col-labels">
+              <label>Denumire departament *</label>
+              <label>Referință reglementare</label>
+              <label>Subordonare</label>
+            </div>
+            <div class="col-inputs">
+              <input type="text" v-model="adminFormData.nume" placeholder="ex: Compartiment Resurse Umane" :disabled="isSavingNode" />
+              <input type="text" v-model="adminFormData.department_rof" placeholder="ex: ROF art. 5, alin. (2)" :disabled="isSavingNode" />
+              <input type="text" v-model="adminFormData.relatie" placeholder="ex: Director General" :disabled="isSavingNode" />
+            </div>
+            <div class="col-rol">
+              <label>Rol departament</label>
+              <textarea v-model="adminFormData.rol" placeholder="Descrierea succintă a activității compartimentului..." :disabled="isSavingNode"></textarea>
+            </div>
+          </div>
         </div>
+
+        <!-- SECȚIUNEA: STRUCTURĂ RESURSE UMANE -->
+        <div class="form-bottom-half">
+          <div class="hr-header">
+            <span>Structură Resurse Umane</span>
+            <button class="add-hr-btn" @click="addDepartmentHrRow" :disabled="isSavingNode">+ Adaugă Rând</button>
+          </div>
+          <table class="hr-table">
+            <thead>
+              <tr>
+                <th style="width: 60px;">Nr. Crt.</th>
+                <th>Denumire post</th>
+                <th style="width: 100px;">Total posturi</th>
+                <th style="width: 100px;">Ocupate</th>
+                <th style="width: 100px;">Vacante</th>
+                <th>Observații</th>
+                <th style="width: 50px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, index) in departmentHrRows" :key="'dep-hr-'+index">
+                <td style="text-align: center;">{{ index + 1 }}</td>
+                <td><input type="text" v-model="row.functie" placeholder="Nume post" :disabled="isSavingNode" /></td>
+                <td><input type="number" v-model.number="row.total" min="0" :disabled="isSavingNode" /></td>
+                <td><input type="number" v-model.number="row.ocupate" min="0" :disabled="isSavingNode" /></td>
+                <td><input type="number" v-model.number="row.vacante" min="0" :disabled="isSavingNode" /></td>
+                <td><input type="text" v-model="row.observatii" placeholder="Detalii" :disabled="isSavingNode" /></td>
+                <td><button class="remove-row-btn" @click="removeDepartmentHrRow(index)" :disabled="isSavingNode">✕</button></td>
+              </tr>
+              <tr v-if="departmentHrRows.length === 0">
+                <td colspan="7" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+
+
+      <!-- ==================== FORMULAR PENTRU ROL ==================== -->
+      <template v-else>
+        <!-- SECȚIUNEA 1: IDENTITATE ROL (3 coloane) -->
+        <div class="form-top-half">
+          <div class="details-grid-3col">
+            <div class="col-labels">
+              <label>Denumire funcție *</label>
+              <label>Cod COR</label>
+              <label>Baza legală a rolului</label>
+              <label>Reglementarea funcției</label>
+              <label>Superior ierarhic</label>
+              <label>Program audiențe</label>
+            </div>
+            <div class="col-inputs">
+              <input type="text" v-model="adminFormData.nume" placeholder="ex: Director Executiv" :disabled="isSavingNode" />
+              <input type="text" v-model="adminFormData.role_cod_cor" placeholder="ex: 111101" :disabled="isSavingNode" />
+              <input type="text" v-model="adminFormData.role_baza_legala" placeholder="ex: Legea nr. X/2023" :disabled="isSavingNode" />
+              <input type="text" v-model="adminFormData.role_reglementare" placeholder="ex: HG nr. Y/2022" :disabled="isSavingNode" />
+              <input type="text" v-model="adminFormData.relatie" placeholder="ex: Ministrul X" :disabled="isSavingNode" />
+              <input type="text" v-model="adminFormData.program" placeholder="ex: Luni 10:00-12:00" :disabled="isSavingNode" />
+            </div>
+            <div class="col-rol">
+              <label>Descrierea rolului</label>
+              <textarea v-model="adminFormData.rol" placeholder="Descrierea atribuțiilor și responsabilităților funcției..." :disabled="isSavingNode"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECȚIUNEA 2: VENITURI (Sporuri / Indemnizații) -->
+        <div class="form-bottom-half">
+          <div class="hr-header">
+            <span>Venituri (Sporuri / Indemnizații)</span>
+            <button class="add-hr-btn" @click="addSporRow" :disabled="isSavingNode">+ Adaugă Venit</button>
+          </div>
+          <table class="hr-table">
+            <thead>
+              <tr>
+                <th style="width: 60px;">Nr. Crt.</th>
+                <th>Denumire Spor / Indemnizație / Alt venit</th>
+                <th style="width: 50px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, index) in roleSporuriRows" :key="'spor-'+index">
+                <td style="text-align: center;">{{ index + 1 }}</td>
+                <td><input type="text" v-model="row.nume" placeholder="ex: Spor de risc, Indemnizație de conducere" :disabled="isSavingNode" /></td>
+                <td><button class="remove-row-btn" @click="removeSporRow(index)" :disabled="isSavingNode">✕</button></td>
+              </tr>
+              <tr v-if="roleSporuriRows.length === 0">
+                <td colspan="3" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate venituri</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <!-- MESAJ ȘI BUTOANE (Comune pentru ambele formulare) -->
+      <div v-if="adminMessage.text" :class="['admin-msg', adminMessage.type]">{{ adminMessage.text }}</div>
+      
+      <div class="form-buttons-new">
+        <button class="btn-save-3d" @click="saveAdminNode" :disabled="isSavingNode">
+          {{ isSavingNode ? 'Se salvează...' : 'Salvează' }}
+        </button>
+        <button class="btn-cancel-flat" @click="cancelAdminAction" :disabled="isSavingNode">
+          Anulează
+        </button>
       </div>
-      <!-- AICI se închide definitiv formularul -->
+    </div>
     </div>
 
     <!-- Modal Autentificare (pentru vizitatori când vor să facă drill-down) -->
@@ -1828,9 +2087,6 @@ const handleDeleteAccount = async () => {
         <button class="btn-export-profile-pdf" @click="exportProfilePDF">Exportă Profil PDF</button>
       </div>
     </div>
-
-
-      
         
               <div class="panel-body" id="user-profile-pdf-section">
                           <!-- HEADER ȘI POZĂ PENTRU PDF (Ascunse pe ecran) -->
@@ -1961,6 +2217,72 @@ const handleDeleteAccount = async () => {
     </div>
     </transition>
 
+       <!-- PANOU PROFIL DEPARTAMENT -->
+    <transition name="slide-panel">
+      <div v-if="showDepartmentPanel" class="panel-left">
+        <div class="panel-header">
+          <h1>Profil Departament</h1>
+          <button class="panel-close-btn" @click="closeDepartmentPanel">✕</button>
+        </div>
+        
+        <div class="panel-body" id="department-profile-pdf-section">
+          <!-- 1. Identitate Departament -->
+          <div class="profile-section" v-if="selectedDepartmentData">
+            <div class="section-title">Identitate Departament</div>
+            <div class="contact-grid">
+              <span class="c-label">Denumire departament</span> <div class="c-value">{{ selectedDepartmentData.node_name || selectedDepartmentData.nume || '-' }}</div>
+              <span class="c-label">Referință reglementare</span> <div class="c-value">{{ selectedDepartmentData.metadata?.rof || '-' }}</div>
+              <span class="c-label">Subordonare</span> <div class="c-value">{{ selectedDepartmentData.metadata?.relatie_superioara || '-' }}</div>
+            </div>
+          </div>
+
+          <!-- 2. Rol Departament -->
+          <div class="profile-section" v-if="selectedDepartmentData">
+            <div class="section-title">Rol Departament</div>
+            <p style="font-size: 0.9rem; color: #334155; line-height: 1.6; margin: 0;">
+              {{ selectedDepartmentData.rol || 'Nu există descriere disponibilă.' }}
+            </p>
+          </div>
+
+          <!-- 3. Structură Resurse Umane -->
+          <div class="profile-section" v-if="selectedDepartmentData">
+            <div class="section-title">Structură Resurse Umane</div>
+            <table class="sources-profile-table">
+              <thead>
+                <tr>
+                  <th>Nr. Crt.</th>
+                  <th>Denumire post</th>
+                  <th>Total posturi</th>
+                  <th>Ocupate</th>
+                  <th>Vacante</th>
+                  <th>Observații</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, index) in departmentProfileHrData" :key="'dep-prof-'+index">
+                  <td style="text-align: center;">{{ index + 1 }}</td>
+                  <td>{{ row.functie || '-' }}</td>
+                  <td style="text-align: center;">{{ row.total || 0 }}</td>
+                  <td style="text-align: center;">{{ row.ocupate || 0 }}</td>
+                  <td style="text-align: center;">{{ row.vacante || 0 }}</td>
+                  <td>{{ row.observatii || '-' }}</td>
+                </tr>
+                <tr v-if="departmentProfileHrData.length === 0">
+                  <td colspan="6" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- BUTON EXPORT PDF -->
+        <div class="profile-pdf-actions">
+          <button class="btn-export-profile-pdf" @click="exportDepartmentPDF">Exportă Profil PDF</button>
+        </div>
+      </div>
+    </transition>
+
+
     <!-- PANOU PROFIL ROL (Apare DOAR la is_institution === false) -->
     <transition name="slide-panel">
       <div v-if="showRolePanel" class="panel-left">
@@ -1968,7 +2290,7 @@ const handleDeleteAccount = async () => {
           <h1>Profil Rol</h1>
           <button class="panel-close-btn" @click="closeRolePanel">✕</button>
         </div>
-        
+    
         <div class="panel-body" id="role-profile-pdf-section">
           
           <!-- 1. Identitate Funcție -->
@@ -2282,6 +2604,23 @@ AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
   
   .node-label { 
     color: #FF3F34 !important; 
+    text-shadow: none !important; 
+    font-size: 0.8rem !important; 
+  }
+}
+
+.node-department .custom-node-container {
+  background: linear-gradient(145deg, #8A00C4, #8A00C4) !important;
+  border-radius: 25px !important;
+  border-color: #5A0078 !important;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.15), 
+    -2px -2px 6px rgba(255, 255, 255, 0.5), 
+    inset -2px -2px 4px rgba(0, 0, 0, 0.05),  
+    inset 2px 2px 4px rgba(255, 255, 255, 0.7) !important; 
+
+  .node-label { 
+    color: #3AC400 !important; 
     text-shadow: none !important; 
     font-size: 0.8rem !important; 
   }
@@ -3708,5 +4047,11 @@ AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
   tbody tr:nth-child(even) {
     background-color: #f8fafc;
   }
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }
 </style>
