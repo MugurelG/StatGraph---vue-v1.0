@@ -8,7 +8,7 @@ import SunburstChart from '../components/SunburstChart.vue';
 import TreemapChart from '../components/TreemapChart.vue';
 import AuthModal from '../components/auth/AuthModal.vue';
 import html2pdf from 'html2pdf.js';
-import { Home, Landmark, MapPin, Building, LogOut, Trash2, User, Pencil, Plus, Edit3, Move, Search } from 'lucide-vue-next';
+import { Home, Landmark, MapPin, Building, LogOut, Trash2, User, Pencil, Plus, Edit3, Move, Search, BookOpen } from 'lucide-vue-next';
 // ADAUGAT: Inițializăm Router-ul și funcțiile de Autentificare
 const router = useRouter();
 const { user, userRole, logout } = useAuth();
@@ -426,12 +426,14 @@ const adminFormData = ref({
   relatie: '',
    is_institution: true,
    is_department: false,
+   calitate_bugetara: '',
    department_angajati: 0,
   department_rof: '',
   // Câmpuri specifice ROL
   role_cod_cor: '',
   role_baza_legala: '',
-  role_reglementare: ''
+  role_reglementare: '',
+  role_gradatie_treapta: '',
 });
 
 // Tabelul de jos (Date Personal)
@@ -828,7 +830,9 @@ const handleAdminEdit = async () => {
             // Preluare date specifice ROL din metadata
       adminFormData.value.role_cod_cor = nodeData.metadata?.cod_cor || '';
       adminFormData.value.role_baza_legala = nodeData.metadata?.baza_legala || '';
-      adminFormData.value.role_reglementare = nodeData.metadata?.reglementare || '';
+            adminFormData.value.role_reglementare = nodeData.metadata?.reglementare || '';
+      adminFormData.value.role_gradatie_treapta = nodeData.metadata?.gradatie_treapta || '';
+
       
       if (nodeData.metadata?.sporuri && Array.isArray(nodeData.metadata.sporuri)) {
         roleSporuriRows.value = nodeData.metadata.sporuri.map(s => ({ nume: s.nume || '' }));
@@ -838,6 +842,7 @@ const handleAdminEdit = async () => {
 
     // Preluare date specifice DEPARTAMENT din metadata
     adminFormData.value.department_rof = nodeData.metadata?.rof || '';
+     adminFormData.value.calitate_bugetara = nodeData.metadata?.calitate_bugetara || '';
     
     if (nodeData.metadata?.hr_departament && Array.isArray(nodeData.metadata.hr_departament)) {
       departmentHrRows.value = nodeData.metadata.hr_departament.map(h => ({
@@ -911,10 +916,13 @@ const saveAdminNode = async () => {
         cod_cor: adminFormData.value.role_cod_cor,
         baza_legala: adminFormData.value.role_baza_legala,
         reglementare: adminFormData.value.role_reglementare,
+        gradatie_treapta: adminFormData.value.role_gradatie_treapta,
         sporuri: roleSporuriRows.value,
-        // Salvare date DEPARTAMENT
+               // Salvare date DEPARTAMENT
         rof: adminFormData.value.department_rof,
-        hr_departament: departmentHrRows.value
+        hr_departament: departmentHrRows.value,
+        // Salvare date INSTITUȚIE
+        calitate_bugetara: adminFormData.value.calitate_bugetara
       }, 
 
       is_institution: adminFormData.value.is_institution,
@@ -955,22 +963,26 @@ is_department: adminFormData.value.is_department
   } else if (adminAction.value === 'edit') {
     const nodeInfo = allNodesList.value.find(n => String(n.id) === nodeId);
     
-    if (!nodeInfo || nodeInfo.parent_id === null) {
-      // Dacă e NOD RĂDĂCINĂ (tabelul institutii)
-      const res = await supabase.from('institutii')
-        .update({ 
-          nume: adminFormData.value.nume,
-          acronim: adminFormData.value.acronim,
-          cui: adminFormData.value.cui,
-          adresa: adminFormData.value.adresa,
-          program: adminFormData.value.program,
-          telefon: adminFormData.value.telefon,
-          email: adminFormData.value.email,
-          rol: adminFormData.value.rol,
-          metadata: { tip: adminFormData.value.tip_institutie, imagine: finalImageUrl, news: adminFormData.value.news, relatie_superioara: adminFormData.value.relatie },
-          is_institution: adminFormData.value.is_institution,
-is_department: adminFormData.value.is_department
-        })
+          if (!nodeInfo || nodeInfo.parent_id === null) {
+        // Dacă e NOD RĂDĂCINĂ (tabelul institutii)
+        const res = await supabase.from('institutii')
+          .update({ 
+            nume: adminFormData.value.nume,
+            acronim: adminFormData.value.acronim,
+            cui: adminFormData.value.cui,
+            adresa: adminFormData.value.adresa,
+            program: adminFormData.value.program,
+            telefon: adminFormData.value.telefon,
+            email: adminFormData.value.email,
+            rol: adminFormData.value.rol,
+            metadata: { 
+              tip: adminFormData.value.tip_institutie, 
+              imagine: finalImageUrl, 
+              news: adminFormData.value.news, 
+              relatie_superioara: adminFormData.value.relatie,
+              calitate_bugetara: adminFormData.value.calitate_bugetara
+            },
+          })
         .eq('id', nodeId)
         .select();
       error = res.error; data = res.data;
@@ -995,9 +1007,11 @@ is_department: adminFormData.value.is_department
             cod_cor: adminFormData.value.role_cod_cor,
             baza_legala: adminFormData.value.role_baza_legala,
             reglementare: adminFormData.value.role_reglementare,
+            gradatie_treapta: adminFormData.value.role_gradatie_treapta,
             sporuri: roleSporuriRows.value,
             rof: adminFormData.value.department_rof,
-            hr_departament: departmentHrRows.value
+            hr_departament: departmentHrRows.value,
+        calitate_bugetara: adminFormData.value.calitate_bugetara
           },
           is_institution: adminFormData.value.is_institution,
           is_department: adminFormData.value.is_department  
@@ -1079,10 +1093,13 @@ is_department: adminFormData.value.is_department
         cod_cor: adminFormData.value.role_cod_cor,
         baza_legala: adminFormData.value.role_baza_legala,
         reglementare: adminFormData.value.role_reglementare,
+        gradatie_treapta: adminFormData.value.role_gradatie_treapta,
         sporuri: roleSporuriRows.value,
-        // Salvare date DEPARTAMENT
+                // Salvare date DEPARTAMENT
         rof: adminFormData.value.department_rof,
-        hr_departament: departmentHrRows.value
+        hr_departament: departmentHrRows.value,
+        // Salvare date INSTITUȚIE
+        calitate_bugetara: adminFormData.value.calitate_bugetara
       }, 
       };
         }
@@ -1550,14 +1567,16 @@ const handleDeleteAccount = async () => {
             </div>
 
             <!-- Controale de Navigare (Înapoi, Nivel, Coloane) -->
-            <div v-if="navigationStack.length > 0 && userRole !== 'vizitator'" class="nav-controls">
-              <button @click="goBack" class="back-button">
-                ⬅ Înapoi
-              </button>
-          
-          <div class="depth-indicator">
-            Nivel: {{ navigationStack.length }}
-          </div>
+                   <div v-if="userRole !== 'vizitator'" class="nav-controls">
+          <template v-if="navigationStack.length > 0">
+            <button @click="goBack" class="back-button">
+              ⬅ Înapoi
+            </button>
+        
+            <div class="depth-indicator">
+              Nivel: {{ navigationStack.length }}
+            </div>
+          </template>
 
           <div class="layout-selector">
             <label for="col-select">Organizează noduri:</label>
@@ -1683,23 +1702,28 @@ const handleDeleteAccount = async () => {
       </aside>
     </transition>
 
-    <!-- Meniu Principal Dreapta -->
+       <!-- Meniu Principal Dreapta -->
     <aside class="right-menu">
       <div class="menu-item" @click="$router.push('/')">
         <Home class="icon" />
-        <span class="label">Acasa</span>
+        <span class="label">ACASA</span>
       </div>
       <div class="menu-item" @click="activePanel = 'national'; localContext = false;">
         <Landmark class="icon" />
-        <span class="label">National</span>
+        <span class="label">NATIONAL</span>
       </div>
       <div class="menu-item" @click="activePanel = 'judet'; localContext = false;">
         <MapPin class="icon" />
-        <span class="label">Judetean</span>
+        <span class="label">JUDETEAN</span>
       </div>
       <div class="menu-item" @click="openLocalMenu">
         <Building class="icon" />
-        <span class="label">Local</span>
+        <span class="label">LOCAL</span>
+      </div>
+
+      <div class="menu-item" @click="$router.push('/educatie')">
+        <BookOpen class="icon" />
+        <span class="label">ACADEMIC</span>
       </div>
 
       <!-- MODIFICAT: Buton Contul meu (doar pentru utilizator) -->
@@ -1829,6 +1853,21 @@ const handleDeleteAccount = async () => {
             </div>
           </div>
         </div>
+
+
+        <!-- SECȚIUNEA: CALITATE BUGETARĂ -->
+        <div class="relation-admin-section">
+          <label>Calitate bugetară</label>
+          <select v-model="adminFormData.calitate_bugetara" :disabled="isSavingNode" style="width: 100%; height: 42px; padding: 0 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; font-family: inherit; background: #ffffff; color: #0f172a; box-sizing: border-box;">
+            <option value="">- Selectează -</option>
+            <option value="Ordonator principal de credite">Ordonator principal de credite</option>
+            <option value="Ordonator secundar de credite">Ordonator secundar de credite</option>
+            <option value="Ordonator terțiar de credite">Ordonator terțiar de credite</option>
+            <option value="Nu se aplică">Nu se aplică</option>
+          </select>
+        </div>
+
+
 
         <!-- SECȚIUNEA: RELAȚII INSTITUȚIONALE -->
         <div class="relation-admin-section">
@@ -2006,6 +2045,13 @@ const handleDeleteAccount = async () => {
           </div>
         </div>
 
+        <!-- SECȚIUNEA: GRADAȚIE / TREAPTĂ -->
+        <div class="relation-admin-section">
+          <label>Gradație / Treaptă</label>
+          <input type="text" v-model="adminFormData.role_gradatie_treapta" placeholder="ex: Gradația 3, Treapta I" :disabled="isSavingNode" />
+        </div>
+
+
         <!-- SECȚIUNEA 2: VENITURI (Sporuri / Indemnizații) -->
         <div class="form-bottom-half">
           <div class="hr-header">
@@ -2108,6 +2154,16 @@ const handleDeleteAccount = async () => {
              <span class="c-label">E-mail</span> <div class="c-value">{{ selectedUserData?.email || '-' }}</div>
             </div>
           </div>
+
+
+          <!-- 1.5 Calitate Bugetară -->
+          <div class="profile-section" v-if="selectedUserData">
+            <div class="section-title">Calitate Bugetară</div>
+            <div class="c-value" style="background: #f8fafc; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+              {{ selectedUserData.metadata?.calitate_bugetara || 'Nu este specificată' }}
+            </div>
+          </div>
+
 
           <!-- 2. Rol & Bază Legală -->
           <div class="profile-section" v-if="selectedUserData">
@@ -2321,13 +2377,17 @@ const handleDeleteAccount = async () => {
             </div>
           </div>
 
-          <!-- 4. Sporuri / Indemnizații -->
+                    <!-- 4. Gradație / Treaptă -->
+          <div class="profile-section" v-if="selectedRoleData">
+            <div class="section-title">Gradație / Treaptă</div>
+            <div class="c-value" style="background: #f8fafc; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+              {{ selectedRoleData.metadata?.gradatie_treapta || '-' }}
+            </div>
+          </div>
+
+          <!-- 5. Sporuri / Indemnizații -->
           <div class="profile-section" v-if="selectedRoleData">
             <div class="section-title">Sporuri / Indemnizații / Alte venituri</div>
-            <div class="contact-grid" style="margin-bottom: 15px;">
-              <span class="c-label">Gradație / Treaptă</span> <div class="c-value">{{ selectedRoleData.metadata?.gradatie_treapta || '-' }}</div>
-            </div>
-            
             <table class="sources-profile-table">
               <thead>
                 <tr>
@@ -2347,7 +2407,7 @@ const handleDeleteAccount = async () => {
             </table>
           </div>
 
-          <!-- 5. Program Audiențe -->
+          <!-- 6. Program Audiențe -->
           <div class="profile-section" v-if="selectedRoleData">
             <div class="section-title">Program Audiențe</div>
             <div class="c-value" style="background: #f8fafc; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
