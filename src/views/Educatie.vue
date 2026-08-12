@@ -1,4 +1,3 @@
-
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue';
 import { supabase } from '../supabaseClient';
@@ -26,14 +25,14 @@ const fetchEducatie = async () => {
 const searchTerm = ref('');
 const activeTab = ref('glosar');
 const sortOrder = ref('default');
-
 const selectedIds = ref([]);
 
 const selectedGlosarCount = computed(() => glosar.value.filter(i => selectedIds.value.includes(i.id)).length);
 const selectedFiseCount = computed(() => fise.value.filter(i => selectedIds.value.includes(i.id)).length);
 const selectedGhiduriCount = computed(() => ghiduri.value.filter(i => selectedIds.value.includes(i.id)).length);
 
-const toggleSelect = (id) => {
+const toggleSelect = (id, event) => {
+  event.stopPropagation(); // Previne deschiderea pop-up-ului când dai click pe checkbox
   const index = selectedIds.value.indexOf(id);
   if (index > -1) {
     selectedIds.value.splice(index, 1);
@@ -55,6 +54,7 @@ const selectAll = (items) => {
     });
   }
 };
+
 const isSearchOpen = ref(false);
 const searchInputRef = ref(null);
 
@@ -69,6 +69,7 @@ const filteredSuggestions = computed(() => {
 const selectItem = (item) => {
   searchTerm.value = item.titlu;
   isSearchOpen.value = false;
+  activeTab.value = item.tip; // Navighează automat la tab-ul corect
 };
 
 const toggleSearch = () => {
@@ -87,66 +88,37 @@ const closeSearch = () => {
 };
 
 // 3. Filtrele principale din pagină
-const glosar = computed(() => {
-  let items = educatieData.value.filter(d => d.tip === 'glosar');
+
+// Funcție pentru a determina tipul de badge în funcție de cuvântul cheie
+const getBadge = (item) => {
+  const k = item.cuvant_cheie?.toLowerCase() || '';
+  if (k.includes('paradox') || k.includes('efect')) return { text: 'Paradox', class: 'badge-paradox' };
+  if (k.includes('lege')) return { text: 'Lege', class: 'badge-lege' };
+  if (k.includes('distincție') || k.includes('eroare')) return { text: 'Distincție', class: 'badge-distinctie' };
+  return { text: 'Termen', class: 'badge-teren' }; // Default
+};
+const filterAndSort = (tip) => {
+  let items = educatieData.value.filter(d => d.tip === tip);
   
   if (searchTerm.value) {
     const term = searchTerm.value.toLowerCase();
     items = items.filter(d => d.titlu.toLowerCase().includes(term) || d.cuvant_cheie?.toLowerCase().includes(term));
   }
 
-  if (sortOrder.value === 'az') {
-    return items.sort((a, b) => a.titlu.localeCompare(b.titlu));
-  } else if (sortOrder.value === 'za') {
-    return items.sort((a, b) => b.titlu.localeCompare(a.titlu));
-  }
+  if (sortOrder.value === 'az') return items.sort((a, b) => a.titlu.localeCompare(b.titlu));
+  if (sortOrder.value === 'za') return items.sort((a, b) => b.titlu.localeCompare(a.titlu));
   
   return items;
-});
+};
 
-const fise = computed(() => {
-  let items = educatieData.value.filter(d => d.tip === 'fisa');
-  
-  if (searchTerm.value) {
-    const term = searchTerm.value.toLowerCase();
-    items = items.filter(d => d.titlu.toLowerCase().includes(term) || d.cuvant_cheie?.toLowerCase().includes(term));
-  }
+const glosar = computed(() => filterAndSort('glosar'));
+const fise = computed(() => filterAndSort('fisa'));
+const ghiduri = computed(() => filterAndSort('ghid'));
 
-  if (sortOrder.value === 'az') {
-    return items.sort((a, b) => a.titlu.localeCompare(b.titlu));
-  } else if (sortOrder.value === 'za') {
-    return items.sort((a, b) => b.titlu.localeCompare(a.titlu));
-  }
-  
-  return items;
-});
-
-
-const ghiduri = computed(() => {
-  let items = educatieData.value.filter(d => d.tip === 'ghid');
-  
-  if (searchTerm.value) {
-    const term = searchTerm.value.toLowerCase();
-    items = items.filter(d => d.titlu.toLowerCase().includes(term) || d.cuvant_cheie?.toLowerCase().includes(term));
-  }
-
-  if (sortOrder.value === 'az') {
-    return items.sort((a, b) => a.titlu.localeCompare(b.titlu));
-  } else if (sortOrder.value === 'za') {
-    return items.sort((a, b) => b.titlu.localeCompare(a.titlu));
-  }
-  
-  return items;
-});
-// 4. Logica Admin: Adăugare Card Nou
+// 4. Logica Admin: Adăugare/Editare Card
 const showForm = ref(false);
 const currentEditId = ref(null);
-const newCard = ref({
-  tip: 'glosar',
-  titlu: '',
-  continut: '',
-  cuvant_cheie: ''
-});
+const newCard = ref({ tip: 'glosar', titlu: '', continut: '', cuvant_cheie: '' });
 
 const resetForm = () => {
   newCard.value = { tip: 'glosar', titlu: '', continut: '', cuvant_cheie: '' };
@@ -158,21 +130,16 @@ const saveCard = async () => {
     alert('Titlul și conținutul sunt obligatorii!');
     return;
   }
-
   let result;
   if (currentEditId.value) {
-    // Dacă avem ID, facem UPDATE
     result = await supabase.from('educatie').update(newCard.value).eq('id', currentEditId.value).select();
   } else {
-    // Dacă nu avem ID, facem INSERT
     result = await supabase.from('educatie').insert([newCard.value]).select();
   }
 
   const { data, error } = result;
-  
   if (!error && data) {
     if (currentEditId.value) {
-      // Actualizăm local în array
       const index = educatieData.value.findIndex(i => i.id === data[0].id);
       if (index !== -1) educatieData.value[index] = data[0];
     } else {
@@ -185,45 +152,17 @@ const saveCard = async () => {
   }
 };
 
- // 5. Logica Admin: Ștergere Card
-
-const editCard = (item) => {
+const editCard = (item, event) => {
+  event.stopPropagation();
   currentEditId.value = item.id;
-  newCard.value = { 
-    tip: item.tip, 
-    titlu: item.titlu, 
-    continut: item.continut, 
-    cuvant_cheie: item.cuvant_cheie 
-  };
+  newCard.value = { tip: item.tip, titlu: item.titlu, continut: item.continut, cuvant_cheie: item.cuvant_cheie };
   showForm.value = true;
 };
 
-const moveCard = async (item) => {
-  const newTip = item.tip === 'glosar' ? 'fisa' : 'glosar';
-  const newTipName = newTip === 'glosar' ? 'Glosar de Termeni' : 'Fișă Instituție';
-  
-  if (!confirm(`Muți "${item.titlu}" la ${newTipName}?`)) return;
-
-  const { data, error } = await supabase
-    .from('educatie')
-    .update({ tip: newTip })
-    .eq('id', item.id)
-    .select();
-
-  if (error) {
-    alert('Eroare la mutare: ' + error.message);
-  } else if (data) {
-    const index = educatieData.value.findIndex(i => i.id === item.id);
-    if (index !== -1) {
-      educatieData.value[index] = { ...educatieData.value[index], tip: newTip };
-    }
-  }
-};
-const deleteCard = async (id) => {
+const deleteCard = async (id, event) => {
+  event.stopPropagation();
   if (!confirm('Ești sigur că vrei să ștergi acest element?')) return;
-
   const { error } = await supabase.from('educatie').delete().eq('id', id);
-
   if (error) {
     alert('Eroare la ștergere: ' + error.message);
   } else {
@@ -231,31 +170,96 @@ const deleteCard = async (id) => {
   }
 };
 
+// --- POP-UP CITIRE (VIEW) - MULTIPLU ---
+const openViewItems = ref([]); // Array care ține minte toate cardurile deschise
+const popupFontSize = ref(16);
+const draggingId = ref(null); // Ține minte ID-ul cardului care se mută acum
+const dragOffsetView = ref({ x: 0, y: 0 });
 
-// 6. Drag & Drop Pop-up
-const popupPos = ref({ x: 150, y: 150 });
-const isDragging = ref(false);
-const dragOffset = ref({ x: 0, y: 0 });
+const changeFontSize = (amount) => {
+  let newSize = popupFontSize.value + amount;
+  if (newSize >= 12 && newSize <= 28) {
+    popupFontSize.value = newSize;
+  }
+};
 
-const startDrag = (e) => {
-  isDragging.value = true;
+const openViewPopup = (item) => {
+  // 1. Limita de 25 de carduri
+  if (openViewItems.value.length >= 25) {
+    alert('Ai atins limita maximă de 25 de carduri deschise simultan.');
+    return;
+  }
+  
+  // 2. Verificăm dacă nu este deja deschis
+  if (openViewItems.value.find(i => i.id === item.id)) return;
+
+  // 3. Îl adăugăm în listă, cu o poziție ușor decalată
+  const offset = openViewItems.value.length * 30; 
+  openViewItems.value.push({
+    ...item, // Păstrăm datele cardului
+    posX: 150 + offset, // Calculăm poziția pe X
+    posY: 100 + offset  // Calculăm poziția pe Y
+  });
+};
+
+const closeViewPopup = (id) => {
+  // Îl scoatem din listă doar pe cel care are ID-ul respectiv
+  openViewItems.value = openViewItems.value.filter(item => item.id !== id);
+};
+
+const startDragView = (e, id) => {
+  e.preventDefault(); // Previne selectarea textului când tragi
+  draggingId.value = id;
+  const item = openViewItems.value.find(i => i.id === id);
+  if (!item) return;
+  
   const rect = e.currentTarget.getBoundingClientRect();
-  dragOffset.value = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  document.addEventListener('mousemove', onDrag);
-  document.addEventListener('mouseup', stopDrag);
+  dragOffsetView.value = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  
+  document.addEventListener('mousemove', onDragView);
+  document.addEventListener('mouseup', stopDragView);
 };
 
-const onDrag = (e) => {
-  if (!isDragging.value) return;
-  popupPos.value = { x: e.clientX - dragOffset.value.x, y: e.clientY - dragOffset.value.y };
+const onDragView = (e) => {
+  if (!draggingId.value) return;
+  const item = openViewItems.value.find(i => i.id === draggingId.value);
+  if (!item) return;
+  
+  item.posX = e.clientX - dragOffsetView.value.x;
+  item.posY = e.clientY - dragOffsetView.value.y;
 };
 
-const stopDrag = () => {
-  isDragging.value = false;
-  document.removeEventListener('mousemove', onDrag);
-  document.removeEventListener('mouseup', stopDrag);
+const stopDragView = () => {
+  draggingId.value = null;
+  document.removeEventListener('mousemove', onDragView);
+  document.removeEventListener('mouseup', stopDragView);
 };
 
+// 6. Pop-up Admin (FORM) - Drag & Drop
+const formPopupPos = ref({ x: 150, y: 150 });
+const isDraggingForm = ref(false);
+const dragOffsetForm = ref({ x: 0, y: 0 });
+
+const startDragForm = (e) => {
+  isDraggingForm.value = true;
+  const rect = e.currentTarget.getBoundingClientRect();
+  dragOffsetForm.value = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  document.addEventListener('mousemove', onDragForm);
+  document.addEventListener('mouseup', stopDragForm);
+};
+
+const onDragForm = (e) => {
+  if (!isDraggingForm.value) return;
+  formPopupPos.value = { x: e.clientX - dragOffsetForm.value.x, y: e.clientY - dragOffsetForm.value.y };
+};
+
+const stopDragForm = () => {
+  isDraggingForm.value = false;
+  document.removeEventListener('mousemove', onDragForm);
+  document.removeEventListener('mouseup', stopDragForm);
+};
+
+// 7. Export PDF
 const exportEducatiePDF = () => {
   let itemsToExport;
   let pdfTitle = 'Modul_Educatie';
@@ -276,777 +280,547 @@ const exportEducatiePDF = () => {
   const fisaItems = itemsToExport.filter(i => i.tip === 'fisa');
   const ghiduriItems = itemsToExport.filter(i => i.tip === 'ghid');
 
-  let htmlContent = `
-    <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;">
-      <h1 style="text-align: center; color: #0f172a; margin-bottom: 30px;">Modul Educațional StatGraph</h1>
-  `;
+  let htmlContent = `<div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;"><h1 style="text-align: center; color: #0f172a; margin-bottom: 30px;">Modul Educațional StatGraph</h1>`;
 
   if (glosarItems.length > 0) {
     htmlContent += `<h2 style="color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">Glosar de Termeni</h2>`;
-    glosarItems.forEach(item => {
-      htmlContent += `
-        <div style="margin-bottom: 15px; page-break-inside: avoid;">
-          <h3 style="color: #1e293b; margin: 0 0 5px 0;">${item.titlu}</h3>
-          <p style="font-size: 14px; line-height: 1.5; color: #475569; margin: 0; white-space: pre-wrap;">${item.continut}</p>
-        </div>`;
-    });
+    glosarItems.forEach(item => { htmlContent += `<div style="margin-bottom: 15px; page-break-inside: avoid;"><h3 style="color: #1e293b; margin: 0 0 5px 0;">${item.titlu}</h3><p style="font-size: 14px; line-height: 1.5; color: #475569; margin: 0; white-space: pre-wrap;">${item.continut}</p></div>`; });
   }
-
   if (ghiduriItems.length > 0) {
     htmlContent += `<h2 style="color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 30px;">Ghiduri / Procese</h2>`;
-    ghiduriItems.forEach(item => {
-      htmlContent += `
-        <div style="margin-bottom: 15px; page-break-inside: avoid;">
-          <h3 style="color: #1e293b; margin: 0 0 5px 0;">${item.titlu}</h3>
-          <p style="font-size: 14px; line-height: 1.5; color: #475569; margin: 0; white-space: pre-wrap;">${item.continut}</p>
-        </div>`;
-    });
+    ghiduriItems.forEach(item => { htmlContent += `<div style="margin-bottom: 15px; page-break-inside: avoid;"><h3 style="color: #1e293b; margin: 0 0 5px 0;">${item.titlu}</h3><p style="font-size: 14px; line-height: 1.5; color: #475569; margin: 0; white-space: pre-wrap;">${item.continut}</p></div>`; });
   }
-
   if (fisaItems.length > 0) {
     htmlContent += `<h2 style="color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-top: 30px;">Fișe de Instituții / Autorități</h2>`;
-    fisaItems.forEach(item => {
-      htmlContent += `
-        <div style="margin-bottom: 15px; page-break-inside: avoid;">
-          <h3 style="color: #1e293b; margin: 0 0 5px 0;">${item.titlu}</h3>
-          <p style="font-size: 14px; line-height: 1.5; color: #475569; margin: 0; white-space: pre-wrap;">${item.continut}</p>
-        </div>`;
-    });
+    fisaItems.forEach(item => { htmlContent += `<div style="margin-bottom: 15px; page-break-inside: avoid;"><h3 style="color: #1e293b; margin: 0 0 5px 0;">${item.titlu}</h3><p style="font-size: 14px; line-height: 1.5; color: #475569; margin: 0; white-space: pre-wrap;">${item.continut}</p></div>`; });
   }
-
   htmlContent += `</div>`;
 
-  // Trimitem direct string-ul HTML, fără să îl mai punem în DOM
-  html2pdf().set({ 
-    margin: 10, 
-    filename: `${pdfTitle}.pdf`, 
-    image: { type: 'jpeg', quality: 0.98 }, 
-    html2canvas: { scale: 2, useCORS: true }, 
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-  }).from(htmlContent).save();
+  html2pdf().set({ margin: 10, filename: `${pdfTitle}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).from(htmlContent).save();
 };
 
-// 7. Inițializare
-onMounted(() => {
-  fetchEducatie();
-});
+onMounted(() => { fetchEducatie(); });
 </script>
 
 <template>
-  <div class="educatie-container">
-    <!-- 1. Buton Înapoi -->
-    <button class="back-btn" @click="$router.push('/dashboard')">
-      ⬅ Înapoi la Organigrame
-    </button>
+  <div class="dashboard-layout">
     
-    <!-- 2. Titlu + Controlere -->
-    <div class="header-row">
-      <h1>Modul Educațional</h1>
-      <div class="header-controls">
-             <div class="select-stacked-group">
+    <!-- ZONA PRINCIPALA (STANGA) -->
+    <div class="main-area">
+      
+      <!-- CONTROALE SUPERIOARE -->
+      <div class="top-controls">
+        <button class="back-btn" @click="$router.push('/dashboard')">⬅ Înapoi</button>
+        
+        <div class="search-container">
+          <div :class="['search-wrapper', { 'is-open': isSearchOpen }]">
+            <input type="text" v-model="searchTerm" placeholder="Caută..." class="search-input" @blur="closeSearch" ref="searchInputRef" />
+            <button class="search-icon-btn" @click="toggleSearch">C</button>
+          </div>
+          <div class="search-dropdown" v-if="isSearchOpen && filteredSuggestions.length > 0">
+            <div class="dropdown-item" @mousedown.prevent="selectItem(item)" v-for="item in filteredSuggestions" :key="item.id">{{ item.titlu }}</div>
+          </div>
+        </div>
+
+        <select v-model="sortOrder" class="sort-select">
+          <option value="default">Ordinea implicită</option>
+          <option value="az">A - Z</option>
+          <option value="za">Z - A</option>
+        </select>
+
+        <div class="control-separator"></div>
+
+        <div class="bulk-actions" v-if="userRole !== 'vizitator'">
           <div class="select-group">
-            <button class="export-btn" @click="selectAll(glosar)">Selectează tot Glosar</button>
+            <button class="mini-btn" @click="selectAll(glosar)">Tot Glosar</button>
             <span class="red-badge" v-if="selectedGlosarCount > 0">{{ selectedGlosarCount }}</span>
           </div>
-
           <div class="select-group">
-            <button class="export-btn" @click="selectAll(fise)">Selectează tot Fișe</button>
+            <button class="mini-btn" @click="selectAll(fise)">Tot Fișe</button>
             <span class="red-badge" v-if="selectedFiseCount > 0">{{ selectedFiseCount }}</span>
           </div>
-
           <div class="select-group">
-            <button class="export-btn" @click="selectAll(ghiduri)">Selectează tot Ghid</button>
+            <button class="mini-btn" @click="selectAll(ghiduri)">Tot Ghid</button>
             <span class="red-badge" v-if="selectedGhiduriCount > 0">{{ selectedGhiduriCount }}</span>
           </div>
         </div>
 
-        <button class="export-btn" @click="exportEducatiePDF" style="background: #f97316; color: white; border-color: #f97316;">
-          📥 Export PDF {{ selectedIds.length > 0 ? '(Selectate)' : '(Tot)' }}
+        <button class="export-btn" @click="exportEducatiePDF">📥 Export PDF {{ selectedIds.length > 0 ? `(${selectedIds.length})` : '(Tot)' }}</button>
+        
+        <button v-if="userRole === 'admin'" class="add-card-btn" @click="resetForm(); showForm = !showForm">
+          {{ showForm ? '✕ Închide Formular' : '+ Adaugă' }}
         </button>
+      </div>
 
-        <div class="add-sort-group">
-          <button class="add-card-btn" @click="resetForm(); showForm = !showForm">
-            {{ showForm ? '✕ Închide' : '+ Adaugă Termen / Instituție' }}
-          </button>
-          <select v-model="sortOrder" class="sort-select">
-            <option value="default">Ordinea implicită</option>
-            <option value="az">A - Z</option>
-            <option value="za">Z - A</option>
-          </select>
-        </div>
+           <!-- GRID-UL DE CARDURI -->
+      <div class="content-grid">
+        
+        <!-- 1. GLOSAR -->
+        <template v-if="activeTab === 'glosar'">
+          <div class="mini-card" v-for="item in glosar" :key="item.id" @click="openViewPopup(item)">
+            <div class="card-top-row">
+              <input v-if="userRole !== 'vizitator'" type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggleSelect(item.id, $event)" class="card-checkbox" />
+              <button v-if="userRole === 'admin'" class="delete-card-btn" @click="deleteCard(item.id, $event)">✕</button>
+            </div>
+            <h3>{{ item.titlu }}</h3>
+            <p class="card-preview">{{ item.continut }}</p>
+            <!-- BADGE-UL NOU -->
+            <div class="card-badge" :class="getBadge(item).class">{{ getBadge(item).text }}</div>
+          </div>
+          <p v-if="glosar.length === 0" class="no-results">Nu s-au găsit termeni.</p>
+        </template>
+
+        <!-- 2. FISE -->
+        <template v-if="activeTab === 'fisa'">
+          <div class="mini-card" v-for="item in fise" :key="item.id" @click="openViewPopup(item)">
+            <div class="card-top-row">
+              <input v-if="userRole !== 'vizitator'" type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggleSelect(item.id, $event)" class="card-checkbox" />
+              <button v-if="userRole === 'admin'" class="delete-card-btn" @click="deleteCard(item.id, $event)">✕</button>
+            </div>
+            <h3>{{ item.titlu }}</h3>
+            <p class="card-preview">{{ item.continut }}</p>
+            <!-- BADGE-UL NOU -->
+            <div class="card-badge" :class="getBadge(item).class">{{ getBadge(item).text }}</div>
+          </div>
+          <p v-if="fise.length === 0" class="no-results">Nu s-au găsit fișe.</p>
+        </template>
+
+        <!-- 3. GHIDURI -->
+        <template v-if="activeTab === 'ghid'">
+          <div class="mini-card" v-for="item in ghiduri" :key="item.id" @click="openViewPopup(item)">
+            <div class="card-top-row">
+              <input v-if="userRole !== 'vizitator'" type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggleSelect(item.id, $event)" class="card-checkbox" />
+              <button v-if="userRole === 'admin'" class="delete-card-btn" @click="deleteCard(item.id, $event)">✕</button>
+            </div>
+            <h3>{{ item.titlu }}</h3>
+            <p class="card-preview">{{ item.continut }}</p>
+            <!-- BADGE-UL NOU -->
+            <div class="card-badge" :class="getBadge(item).class">{{ getBadge(item).text }}</div>
+          </div>
+          <p v-if="ghiduri.length === 0" class="no-results">Nu au fost adăugate ghiduri.</p>
+        </template>
+
       </div>
     </div>
 
-    <!-- 3. Căutare -->
-    <div class="search-container">
-      <div :class="['search-wrapper', { 'is-open': isSearchOpen }]">
-        <input 
-          type="text" 
-          v-model="searchTerm" 
-          placeholder="Caută un termen sau o instituție..." 
-          class="search-input"
-          @blur="closeSearch" 
-          ref="searchInputRef"
-        />
-        <button class="search-icon-btn" @click="toggleSearch">C</button>
-      </div>
+    <!-- SIDEBAR DREAPTA (FIXAT PE ECRAN) -->
+    <div class="right-sidebar">
+      <button :class="['sidebar-btn', { active: activeTab === 'glosar' }]" @click="activeTab = 'glosar'">📘 Glosar</button>
+      <button :class="['sidebar-btn', { active: activeTab === 'fisa' }]" @click="activeTab = 'fisa'">🏢 Fișe</button>
+      <button :class="['sidebar-btn', { active: activeTab === 'ghid' }]" @click="activeTab = 'ghid'">📋 Ghiduri</button>
       
-      <div class="search-dropdown" v-if="isSearchOpen && filteredSuggestions.length > 0">
-        <div 
-          class="dropdown-item" 
-          @mousedown.prevent="selectItem(item)"
-          v-for="item in filteredSuggestions" 
-          :key="item.id"
-        >
-          {{ item.titlu }}
-        </div>
+      <div class="sidebar-footer">
+        <span class="footer-label">Total vizibile:</span>
+        <span class="footer-number">
+          <span v-if="activeTab === 'glosar'">{{ glosar.length }}</span>
+          <span v-if="activeTab === 'fisa'">{{ fise.length }}</span>
+          <span v-if="activeTab === 'ghid'">{{ ghiduri.length }}</span>
+        </span>
       </div>
     </div>
 
-    <!-- 4. Pop-up Admin (Draggable) -->
-    <div 
-      v-if="showForm" 
-      class="educatie-popup"
-      :style="{ left: popupPos.x + 'px', top: popupPos.y + 'px' }"
-    >
-      <div class="popup-header" @mousedown="startDrag">
-        <span>Adaugă conținut nou</span>
-        <button class="popup-close-btn" @click="showForm = false; resetForm()">✕</button>
-      </div>
-
-      <div class="popup-body">
-        <div class="form-row">
-          <label>Tip</label>
-          <select v-model="newCard.tip">
-            <option value="glosar">Glosar de Termeni</option>
-            <option value="fisa">Fisă Instituție</option>
-            <option value="ghid">Ghid / Proces</option>
-          </select>
-        </div>
-
-        <div class="form-row">
-          <label>Titlu *</label>
-          <input type="text" v-model="newCard.titlu" placeholder="ex: Ordonator de credite" />
-        </div>
-
-        <div class="form-row">
-          <label>Conținut *</label>
-          <textarea v-model="newCard.continut" rows="4" placeholder="Scrie aici definiția sau descrierea..."></textarea>
-        </div>
-
-        <div class="form-row">
-          <label>Cuvânt cheie</label>
-          <input type="text" v-model="newCard.cuvant_cheie" placeholder="ex: buget, fonduri, bani" />
-        </div>
-
-        <div class="form-actions">
-          <button class="btn-save" @click="saveCard">Salvează</button>
-          <button class="btn-cancel" @click="showForm = false; resetForm()">Anulează</button>
-        </div>
-      </div>
-    </div>
-
-       <!-- 5. Taburi de navigare -->
-    <div class="tabs-container">
-      <button :class="['tab-btn', { active: activeTab === 'glosar' }]" @click="activeTab = 'glosar'">Glosar de Termeni</button>
-      <button :class="['tab-btn', { active: activeTab === 'fisa' }]" @click="activeTab = 'fisa'">Fișe Instituții</button>
-      <button :class="['tab-btn', { active: activeTab === 'ghid' }]" @click="activeTab = 'ghid'">Ghiduri / Procese</button>
-    </div>
-
-    <!-- 6. Conținut principal (Carduri) -->
-    <div class="sections-wrapper-single">
-      <div v-if="activeTab === 'glosar'" class="section-box">
-        <h2>Glosar de Termeni</h2>
-        <div class="card" v-for="item in glosar" :key="item.id">
-          <div class="card-header">
-            <div class="card-title-row" v-if="userRole !== 'vizitator'">
-              <input type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggleSelect(item.id)" class="card-checkbox" />
-              <h3>{{ item.titlu }}</h3>
+     <!-- POP-UP CITIRE (VIEW) - MULTIPLU -->
+    <!-- Folosim v-for pentru a crea un pop-up fizic pentru fiecare card din array-ul openViewItems -->
+    <div v-for="item in openViewItems" :key="'popup-' + item.id" class="popup-overlay">
+      <div class="popup-view" :style="{ left: item.posX + 'px', top: item.posY + 'px' }">
+        <div class="popup-header-view" @mousedown="startDragView($event, item.id)">
+          <h3>{{ item.titlu }}</h3>
+          <div class="popup-header-actions">
+            <div class="font-controls">
+              <button @click="changeFontSize(-2)" title="Micșorează textul">A-</button>
+              <button @click="changeFontSize(2)" title="Mărește textul">A+</button>
             </div>
-            <h3 v-else>{{ item.titlu }}</h3>
-            <div class="card-actions">
-              <button v-if="userRole === 'admin'" class="card-action-btn edit" @click="editCard(item)">✏️</button>
-              <button v-if="userRole === 'admin'" class="card-action-btn move" @click="moveCard(item)">↕️</button>
-              <button v-if="userRole === 'admin'" class="card-action-btn delete" @click="deleteCard(item.id)">✕</button>
-            </div>
+            <!-- La închidere, transmitem ID-ul cardului respectiv -->
+            <button class="close-btn-red" @click="closeViewPopup(item.id)">✕</button>
           </div>
-          <p>{{ item.continut }}</p>
         </div>
-        <p v-if="glosar.length === 0" class="no-results">Nu s-au găsit termeni.</p>
-      </div>
-
-      <div v-if="activeTab === 'fisa'" class="section-box">
-        <h2>Fișe de Instituții / Autorități</h2>
-        <div class="card" v-for="item in fise" :key="item.id">
-          <div class="card-header">
-            <div class="card-title-row" v-if="userRole !== 'vizitator'">
-              <input type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggleSelect(item.id)" class="card-checkbox" />
-              <h3>{{ item.titlu }}</h3>
-            </div>
-            <h3 v-else>{{ item.titlu }}</h3>
-            <div class="card-actions">
-              <button v-if="userRole === 'admin'" class="card-action-btn edit" @click="editCard(item)">✏️</button>
-              <button v-if="userRole === 'admin'" class="card-action-btn move" @click="moveCard(item)">↕️</button>
-              <button v-if="userRole === 'admin'" class="card-action-btn delete" @click="deleteCard(item.id)">✕</button>
-            </div>
-          </div>
-          <p>{{ item.continut }}</p>
+        <div class="popup-content-view" :style="{ fontSize: popupFontSize + 'px' }">
+          {{ item.continut }}
         </div>
-        <p v-if="fise.length === 0" class="no-results">Nu s-au găsit fișe.</p>
-      </div>
-
-      <div v-if="activeTab === 'ghid'" class="section-box">
-        <h2>Ghiduri / Procese</h2>
-        <div class="card" v-for="item in ghiduri" :key="item.id">
-          <div class="card-header">
-            <div class="card-title-row" v-if="userRole !== 'vizitator'">
-              <input type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggleSelect(item.id)" class="card-checkbox" />
-              <h3>{{ item.titlu }}</h3>
-            </div>
-            <h3 v-else>{{ item.titlu }}</h3>
-            <div class="card-actions">
-              <button v-if="userRole === 'admin'" class="card-action-btn edit" @click="editCard(item)">✏️</button>
-              <button v-if="userRole === 'admin'" class="card-action-btn move" @click="moveCard(item)">↕️</button>
-              <button v-if="userRole === 'admin'" class="card-action-btn delete" @click="deleteCard(item.id)">✕</button>
-            </div>
-          </div>
-          <p>{{ item.continut }}</p>
-        </div>
-        <p v-if="ghiduri.length === 0" class="no-results">Nu au fost adăugate ghiduri.</p>
       </div>
     </div>
+
+    <!-- POP-UP ADMIN (FORMULAR) -->
+    <div v-if="showForm" class="popup-overlay" style="z-index: 1100;">
+      <div class="popup-form" :style="{ left: formPopupPos.x + 'px', top: formPopupPos.y + 'px' }">
+        <div class="popup-header-form" @mousedown="startDragForm">
+          <span>Adaugă / Editează conținut</span>
+          <button class="popup-close-btn" @click="showForm = false; resetForm()">✕</button>
+        </div>
+        <div class="popup-body-form">
+          <div class="form-row">
+            <label>Tip</label>
+            <select v-model="newCard.tip">
+              <option value="glosar">Glosar de Termeni</option>
+              <option value="fisa">Fisă Instituție</option>
+              <option value="ghid">Ghid / Proces</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Titlu *</label>
+            <input type="text" v-model="newCard.titlu" placeholder="ex: Ordonator de credite" />
+          </div>
+          <div class="form-row">
+            <label>Conținut *</label>
+            <textarea v-model="newCard.continut" rows="6" placeholder="Scrie aici..."></textarea>
+          </div>
+          <div class="form-row">
+            <label>Cuvânt cheie</label>
+            <input type="text" v-model="newCard.cuvant_cheie" placeholder="ex: buget, fonduri" />
+          </div>
+          <div class="form-actions">
+            <button class="btn-save" @click="saveCard">Salvează</button>
+            <button class="btn-cancel" @click="showForm = false; resetForm()">Anulează</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <style lang="scss" scoped>
-.educatie-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 30px;
+// LAYOUT PRINCIPAL (Fără flex, se bazează pe sidebar fix)
+.dashboard-layout {
+  position: relative;
+  min-height: 100vh;
+  background: #f1f5f9;
   font-family: inherit;
   color: #1e293b;
+}
+
+.main-area {
+  // Mutăm conținutul principal la stânga cu 220px pentru a face loc sidebar-ului fix
+  margin-right: 80px; 
   display: flex;
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  box-sizing: border-box;
 }
 
-h1 {
-  font-size: 1.8rem;
-  font-weight: 800;
-  margin: 0;
-  color: #0f172a;
-}
-
-.search-container {
-  position: relative;
-  margin-bottom: 20px;
-  max-width: 350px;
-  flex-shrink: 0;
-}
-
-.search-wrapper {
+// CONTROLERE SUPERIOARE
+.top-controls {
   display: flex;
   align-items: center;
-  background: transparent;
-  border-radius: 30px;
-  border: 1px solid transparent;
-  box-shadow: none;
-  overflow: visible;
-  transition: all 0.3s ease;
-  width: 45px;
-  height: 45px;
-}
-
-.search-wrapper.is-open {
-  width: 100%;
-  max-width: 350px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-}
-
-.search-input {
-  width: 100%;
-  padding: 0 15px;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: 0.9rem;
-  color: #0f172a;
-  font-family: inherit;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease 0.1s;
-}
-
-.search-wrapper.is-open .search-input {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.search-icon-btn {
-  width: 45px;
-  height: 45px;
+  gap: 12px;
+  padding: 15px 25px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
   flex-shrink: 0;
-  background: #ffffff;
-  border: 2px solid #dc2626;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #0f172a;
-  font-size: 1.1rem;
-  font-weight: 800;
-  font-family: inherit;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #dc2626;
-    color: #ffffff;
-  }
-}
-
-.search-dropdown {
-  position: absolute;
-  top: 55px;
-  left: 0;
-  width: 100%;
-  max-width: 350px;
-  max-height: 250px;
-  overflow-y: auto;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-  border: 1px solid #e2e8f0;
-  z-index: 100;
-}
-
-.dropdown-item {
-  padding: 12px 16px;
-  font-size: 0.9rem;
-  color: #1e293b;
-  cursor: pointer;
-  transition: 0.2s;
-  border-bottom: 1px solid #f1f5f9;
-  
-  &:hover {
-    background: #f8fafc;
-    color: #2563eb;
-  }
 }
 
 .back-btn {
-  background: #ffffff;
-  color: #000000;
-  border: 2px solid #dc2626;
-  padding: 10px 24px;
-  border-radius: 50px;
-  font-size: 0.9rem;
-  font-weight: 800;
-  font-family: inherit;
-  cursor: pointer;
-  margin-bottom: 20px;
-  transition: all 0.1s ease;
-  flex-shrink: 0;
-
-  &:hover {
-    color: #dc2626;
-    box-shadow: 0 4px 0 #b91c1c, 0 6px 12px rgba(0,0,0,0.15);
-  }
-
-  &:active {
-    transform: translateY(4px);
-    box-shadow: 0 0 0 #b91c1c;
-  }
+  background: #ffffff; color: #000000; border: 2px solid #dc2626; padding: 8px 18px; border-radius: 50px; font-size: 0.85rem; font-weight: 800; cursor: pointer; transition: all 0.1s;
+  &:hover { color: #dc2626; box-shadow: 0 4px 0 #b91c1c; }
+  &:active { transform: translateY(4px); box-shadow: 0 0 0 #b91c1c; }
 }
 
-.header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 10px;
-  flex-shrink: 0;
+.control-separator { width: 1px; height: 30px; background: #e2e8f0; }
+
+.search-container { position: relative; }
+.search-wrapper { display: flex; align-items: center; background: transparent; border-radius: 30px; border: 1px solid transparent; overflow: visible; transition: all 0.3s ease; width: 40px; height: 40px; }
+.search-wrapper.is-open { width: 250px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.search-input { width: 100%; padding: 0 15px; border: none; outline: none; background: transparent; font-size: 0.85rem; opacity: 0; pointer-events: none; transition: opacity 0.2s ease 0.1s; font-family: inherit; }
+.search-wrapper.is-open .search-input { opacity: 1; pointer-events: auto; }
+.search-icon-btn { width: 40px; height: 40px; flex-shrink: 0; background: #ffffff; border: 2px solid #dc2626; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 1rem; font-weight: 800; transition: 0.2s; }
+.search-icon-btn:hover { background: #dc2626; color: #fff; }
+.search-dropdown { position: absolute; top: 50px; left: 0; width: 250px; background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); border: 1px solid #e2e8f0; z-index: 50; }
+.dropdown-item { padding: 10px 15px; font-size: 0.85rem; cursor: pointer; border-bottom: 1px solid #f1f5f9; &:hover { background: #f8fafc; color: #2563eb; } }
+
+.sort-select { 
+  margin-left: 25px; /* <-- Am adăugat asta pentru spațiu față de căutare */
+  padding: 8px 12px; 
+  border: 1px solid #cbd5e1; 
+  border-radius: 6px; 
+  font-size: 0.85rem; 
+  font-family: inherit; 
+  background: white; 
+  cursor: pointer; 
+  outline: none; 
 }
+.bulk-actions { display: flex; gap: 10px; align-items: center; }
+.select-group { display: flex; align-items: center; gap: 5px; }
+.mini-btn { background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-family: inherit; font-weight: 600; transition: 0.2s; &:hover { background: #e2e8f0; } }
+.red-badge { background: #dc2626; color: white; border-radius: 10px; padding: 2px 6px; font-size: 0.7rem; font-weight: 700; }
+.export-btn { background: #f97316; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: 0.2s; font-family: inherit; &:hover { background: #ea580c; } }
+.add-card-btn { background: #16a34a; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: 0.2s; font-family: inherit; &:hover { background: #15803d; } }
 
-.header-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.select-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.select-stacked-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.red-badge {
-  width: 24px;
-  height: 24px;
-  background: #ffffff;
-  border: 2px solid #dc2626;
-  border-radius: 50%;
-  color: #000000;
-  font-size: 0.75rem;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.export-btn {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #e2e8f0;
-  padding: 6px 14px;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: 0.2s;
-  white-space: nowrap;
-
-  &:hover {
-    background: #e2e8f0;
-    color: #1e293b;
-  }
-}
-
-.add-sort-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.add-card-btn {
-  background: #16a34a;
-  color: white;
-  border: none;
-  padding: 12px 20px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  transition: 0.2s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  white-space: nowrap;
-
-  &:hover {
-    background: #15803d;
-  }
-}
-
-.sort-select {
-  padding: 10px 14px;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-family: inherit;
-  outline: none;
-  cursor: pointer;
-  background: white;
-  color: #1e293b;
-
-  &:focus {
-    border-color: #3b82f6;
-  }
-}
-
-/* --- NOU: Tab-uri de navigare --- */
-.tabs-container {
-  display: flex;
-  gap: 0;
-  margin-bottom: 20px;
-  border-bottom: 2px solid #e2e8f0;
-  flex-shrink: 0;
-}
-
-.tab-btn {
-  background: transparent;
-  border: none;
-  padding: 12px 24px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: #64748b;
-  cursor: pointer;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
-  transition: all 0.2s;
-
-  &.active {
-    color: #1e293b;
-    border-bottom-color: #2563eb;
-  }
-
-  &:hover:not(.active) {
-    color: #334155;
-    background: #f8fafc;
-  }
-}
-
-/* --- NOU: Container pentru carduri (o singură coloană) --- */
-.sections-wrapper-single {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  margin-top: 0;
-}
-
-.section-box {
-  height: 100%;
+// GRID CARDURI
+.content-grid {
+  flex: 1;
   overflow-y: auto;
-  padding-right: 10px;
-  box-sizing: border-box;
-
-  &::-webkit-scrollbar {
-    width: 8px;
-  }
-  &::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 4px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 4px;
-    &:hover {
-      background: #94a3b8;
-    }
-  }
-
-  h2 {
-    font-size: 1.2rem;
-    font-weight: 700;
-    margin-bottom: 20px;
-    padding-bottom: 10px;
-    border-bottom: 3px solid #e2e8f0;
-    color: #334155;
-    position: sticky;
-    top: 0;
-    background: white;
-    z-index: 10;
-    margin-top: 0;
-  }
-}
-
-.card {
-  background: #ffffff;
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.03);
-  margin-bottom: 16px;
-  transition: box-shadow 0.2s;
-
-  &:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-  }
-
-  h3 {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: #1e293b;
-    margin: 0 0 10px 0;
-  }
-
-  p {
-    font-size: 0.9rem;
-    line-height: 1.6;
-    color: #475569;
-    margin: 0;
-    white-space: pre-wrap; 
-  }
-}
-
-.no-results {
-  font-size: 0.9rem;
-  color: #94a3b8;
-  font-style: italic;
-}
-
-.educatie-popup {
-  position: fixed;
-  width: 450px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
-  border: 1px solid #e2e8f0;
-  z-index: 1100;
-  user-select: none;
-  overflow: hidden;
-}
-
-.popup-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  cursor: grab;
-  font-weight: 700;
-  color: #1e293b;
-
-  &:active { cursor: grabbing; }
-}
-
-.popup-close-btn {
-  background: #e2e8f0;
-  border: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  cursor: pointer;
-  color: #64748b;
-  transition: 0.2s;
-
-  &:hover { background: #dc2626; color: white; }
-}
-
-.popup-body {
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.form-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-
-  label {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: #64748b;
-    text-transform: uppercase;
-  }
-
-  input, select, textarea {
-    width: 100%;
-    padding: 10px 14px;
-    border: 1.5px solid #cbd5e1;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-family: inherit;
-    outline: none;
-    box-sizing: border-box;
-    color: #0f172a;
-    transition: 0.2s;
-
-    &:focus {
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-    }
-  }
-
-  textarea { resize: vertical; }
-}
-
-.form-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 8px;
-}
-
-.btn-save {
-  background: #16a34a;
-  color: white;
-  border: none;
-  padding: 10px 24px;
-  border-radius: 8px;
-  font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  transition: 0.2s;
-
-  &:hover { background: #15803d; }
-}
-
-.btn-cancel {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #e2e8f0;
-  padding: 10px 24px;
-  border-radius: 8px;
-  font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
-  transition: 0.2s;
-
-  &:hover { background: #e2e8f0; }
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  padding: 25px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 15px;
+  align-content: start; // Important ca primele randuri sa fie sus
   
-  h3 {
-    margin: 0;
-    flex-grow: 1;
-  }
+  &::-webkit-scrollbar { width: 8px; }
+  &::-webkit-scrollbar-track { background: #f1f5f9; }
+  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 }
 
-.card-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-  margin-left: 10px;
-}
-
-.card-action-btn {
-  background: #e2e8f0;
-  border: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  font-size: 0.85rem;
+.mini-card {
+  background: white;
+  border-radius: 12px;
+  padding: 15px;
+  border: 1px solid #e2e8f0;
   cursor: pointer;
-  color: #64748b;
-  transition: 0.2s;
+  transition: all 0.2s;
   display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &.delete:hover { background: #dc2626; color: white; }
-  &.edit:hover { background: #2563eb; color: white; }
-  &.move:hover { background: #f59e0b; color: white; }
+  flex-direction: column;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  
+  &:hover { box-shadow: 0 8px 16px rgba(0,0,0,0.08); transform: translateY(-2px); border-color: #cbd5e1; }
+  
+  h3 { font-size: 0.95rem; margin: 10px 0; color: #0f172a; }
 }
 
-.card-title-row {
+.card-top-row {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  left: 10px;
+}
+
+.card-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: #2563eb; }
+.delete-card-btn { background: none; border: none; color: #94a3b8; font-size: 0.9rem; cursor: pointer; opacity: 0; transition: 0.2s; padding: 0 2px; }
+.mini-card:hover .delete-card-btn { opacity: 1; }
+.delete-card-btn:hover { color: #dc2626; }
+
+// TRUCUL PENTRU TAIEREA TEXTULUI LA 3 RANDURI
+.card-preview {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #64748b;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   flex-grow: 1;
 }
 
-.card-checkbox {
-  width: 18px;
-  height: 18px;
-  margin-top: 4px;
+.card-preview {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #64748b;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex-grow: 1;
+}
+
+// --- NOU: STILURILE PENTRU BADGES ---
+.card-badge {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  font-size: 0.6rem;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.badge-teren { background: #dbeafe; color: #1e40af; } // Albastru
+.badge-paradox { background: #fee2e2; color: #991b1b; } // Roșu
+.badge-lege { background: #ffedd5; color: #9a3412; } // Portocaliu
+.badge-distinctie { background: #dcfce7; color: #166534; } // Verde
+
+.no-results { grid-column: 1 / -1; text-align: center; color: #94a3b8; font-style: italic; margin-top: 50px; }
+
+// SIDEBAR DREAPTA (FIXAT PE ECRAN)
+.right-sidebar {
+  position: fixed;
+  right: 0;
+  top: 0;
+  width: 80px;
+  height: 100vh;
+  background: #ffffff;
+  border-left: 1px solid #e2e8f0;
+  padding: 30px 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 15px rgba(0,0,0,0.05);
+  z-index: 50;
+  box-sizing: border-box;
+}
+
+.sidebar-btn {
+  background: transparent;
+  border: none;
+  border-left: 4px solid transparent;
+  padding: 16px 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #64748b;
   cursor: pointer;
+  text-align: left;
+  border-radius: 0;
+  margin-bottom: 5px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+
+  &:hover {
+    background: #f8fafc;
+    color: #0f172a;
+    border-left-color: #cbd5e1;
+  }
+
+  &.active {
+    background: #f1f5f9;
+    border-left-color: #2563eb;
+    color: #0f172a;
+    font-weight: 700;
+  }
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 20px;
+  border-top: 1px solid #f1f5f9;
+  text-align: center;
+}
+
+.footer-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 5px;
+}
+
+.footer-number {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  display: block;
+}
+
+// POP-UP-uri (OVERLAY SHARED)
+.popup-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 1000;
+  pointer-events: none; // Permite click prin spate daca nu atingi pop-upul
+}
+
+// POP-UP CITIRE
+.popup-view {
+  position: absolute;
+  width: 500px;
+  max-width: 90vw;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  pointer-events: auto;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+
+.popup-header-view {
+  background: #f8fafc;
+  padding: 15px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: grab;
+  
+  &:active { cursor: grabbing; }
+  h3 { margin: 0; font-size: 1.1rem; color: #0f172a; padding-right: 20px; flex-grow: 1; } // Am adăugat flex-grow
+}
+
+// NOU: Gruparea butoanelor din header
+.popup-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
 }
 
+.font-controls {
+  display: flex;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: white;
+}
+
+.font-controls button {
+  background: white;
+  border: none;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+  color: #475569;
+  font-family: inherit;
+  
+  &:hover { background: #f1f5f9; color: #0f172a; }
+  // Linie de separare intre A- si A+
+  &:not(:last-child) { border-right: 1px solid #e2e8f0; } 
+}
+
+.popup-content-view {
+  padding: 25px;
+  line-height: 1.7;
+  color: #334155;
+  max-height: 65vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  transition: font-size 0.2s ease; // ANIMAȚIE: Textul se mărește/micșorează fin
+}
+
+// POP-UP FORMULAR (ADMIN)
+.popup-form {
+  position: absolute;
+  width: 450px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+  border: 2px solid #16a34a; // Verde pentru a-l diferentia
+  pointer-events: auto;
+  overflow: hidden;
+}
+.popup-header-form {
+  background: #f0fdf4; // Verde deschis
+  padding: 14px 20px;
+  border-bottom: 1px solid #bbf7d0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: grab;
+  font-weight: 700;
+  color: #15803d;
+  
+  &:active { cursor: grabbing; }
+}
+.popup-close-btn { background: #dc2626; color: white; border: none; width: 28px; height: 28px; border-radius: 6px; font-size: 0.9rem; cursor: pointer; transition: 0.2s; &:hover { background: #b91c1c; } }
+.popup-body-form { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.form-row { display: flex; flex-direction: column; gap: 6px; 
+  label { font-size: 0.8rem; font-weight: 700; color: #64748b; text-transform: uppercase; }
+  input, select, textarea { width: 100%; padding: 10px 14px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; font-family: inherit; outline: none; box-sizing: border-box; color: #0f172a; transition: 0.2s; &:focus { border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15); } }
+  textarea { resize: vertical; }
+}
+.form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px; }
+.btn-save { background: #16a34a; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-family: inherit; cursor: pointer; transition: 0.2s; &:hover { background: #15803d; } }
+.btn-cancel { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-family: inherit; cursor: pointer; transition: 0.2s; &:hover { background: #e2e8f0; } }
 </style>
