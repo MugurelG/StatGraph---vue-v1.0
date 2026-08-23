@@ -36,6 +36,18 @@ const removeDiacritics = (str) => {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 };
 
+const selectedLogoFile = ref(null);
+const logoPreview = ref(null);
+const removeLogo = ref(false);
+
+const onLogoChange = (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  selectedLogoFile.value = file;
+  logoPreview.value = URL.createObjectURL(file);
+};
+
+
 // --- ETICHETE (Pasul 3) ---
 const selectedTags = ref([]);
 
@@ -215,13 +227,14 @@ const openUserDetails = async (node) => {
             .select('*')
             .eq('organogram_node_id', String(node.id));
           
-          if (!error && data) {
+           if (!error && data) {
             userHrData.value = data.map(row => ({
               functie: row.functie || '',
               ocupate: row.pozitii_ocupate || 0,
               vacante: row.pozitii_vacante || 0,
               total: (row.pozitii_ocupate || 0) + (row.pozitii_vacante || 0),
-              statut: row.statut || 'Activ'
+              statut: row.statut || 'Activ',
+              finColumns: row.fin_columns || [] // PRELUARE COLOANE FINANCIARE PT PROFIL
             }));
           } else {
             userHrData.value = [];
@@ -231,7 +244,8 @@ const openUserDetails = async (node) => {
 
         const handleDetailsClick = (node) => {
   const nodeData = allNodesList.value.find(n => String(n.id) === String(node.id));
-  if (nodeData && nodeData.is_department) {
+  
+   if (nodeData && nodeData.is_department) {
     selectedDepartmentData.value = nodeData;
     departmentProfileHrData.value = nodeData.metadata?.hr_departament || [];
     showDepartmentPanel.value = true;
@@ -364,6 +378,26 @@ const exportPosturiPDF = () => {
 const exportRolePDF = () => {
   const element = document.getElementById('role-profile-pdf-section');
   if (!element) return;
+
+  // 1. Clonăm elementul pentru a nu strica designul de pe ecran
+  const clonedElement = element.cloneNode(true);
+  clonedElement.style.position = 'static';
+  clonedElement.style.margin = '0';
+  clonedElement.style.padding = '20px';
+  clonedElement.style.height = 'auto'; // Forțăm înălțimea să se adapteze la conținut
+  clonedElement.style.overflow = 'hidden'; // Evităm spații goale infinite
+
+  // 2. Creăm un wrapper temporar invizibil pe ecran
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'absolute';
+  wrapper.style.left = '-9999px';
+  wrapper.style.top = '0';
+  wrapper.style.width = '600px'; // Lățime fixă pentru un PDF curat
+  wrapper.style.background = 'white';
+  wrapper.appendChild(clonedElement);
+  
+  document.body.appendChild(wrapper);
+
   const opt = { 
     margin: [10, 10, 10, 10], 
     filename: `Profil_Rol_${selectedRoleData.value?.nume || 'rol'}.pdf`, 
@@ -372,8 +406,14 @@ const exportRolePDF = () => {
     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
   };
-  html2pdf().set(opt).from(element).save();
+
+  html2pdf().set(opt).from(clonedElement).save().finally(() => {
+    // 3. Ștergem wrapper-ul din DOM
+    document.body.removeChild(wrapper);
+  });
 };
+
+
 
 const exportDepartmentPDF = () => {
   const element = document.getElementById('department-profile-pdf-section');
@@ -436,13 +476,35 @@ const adminFormData = ref({
   role_gradatie_treapta: '',
 });
 
+let finColIdCounter = 0; // Contor pentru ID-uri unice de coloane
 // Tabelul de jos (Date Personal)
 const hrRows = ref([]);
 const addHrRow = () => {  
-hrRows.value.push({ functie: '', ocupate: 1, vacante: 0, statut: 'Activ' });
+  hrRows.value.push({ 
+    functie: '', 
+    ocupate: 1, 
+    vacante: 0, 
+    statut: 'Activ',
+    finColumns: [] // <-- ADAUGAT: Aici se vor stoca coloanele dinamice ale acestui rând
+  });
 };
 const removeHrRow = (index) => {
   hrRows.value.splice(index, 1);
+};
+// --- LOGICĂ COLOANE DINAMICE INSTITUȚII ---
+const addFinColToRow = (rowIndex) => {
+  const name = prompt("Numele venitului (ex: Salariu de bază, Spor vechime):");
+  if (!name) return;
+  hrRows.value[rowIndex].finColumns.push({
+    id: 'fc_' + (++finColIdCounter),
+    name: name,
+    type: 'valoare', // Implicit: valoare
+    value: 0
+  });
+};
+
+const removeFinColFromRow = (rowIndex, colId) => {
+  hrRows.value[rowIndex].finColumns = hrRows.value[rowIndex].finColumns.filter(c => c.id !== colId);
 };
 
 // Tabelul Surse Informații
@@ -459,16 +521,196 @@ const removeSourceRow = (index) => {
 const roleSporuriRows = ref([]);
 const departmentHrRows = ref([]);
 const addDepartmentHrRow = () => {
-  departmentHrRows.value.push({ functie: '', total: 0, ocupate: 0, vacante: 0, observatii: '' });
+  departmentHrRows.value.push({ 
+    functie: '', 
+    total: 0, 
+    ocupate: 0, 
+    vacante: 0, 
+    observatii: '',
+    finColumns: [] // <-- ADAUGAT: Aici se vor stoca coloanele dinamice ale acestui rând
+  });
 };
 const removeDepartmentHrRow = (index) => {
   departmentHrRows.value.splice(index, 1);
 };
+
+// --- LOGICĂ COLOANE DINAMICE DEPARTEMENTE ---
+const addFinColToDeptRow = (rowIndex) => {
+  const name = prompt("Numele venitului pentru departament:");
+  if (!name) return;
+  departmentHrRows.value[rowIndex].finColumns.push({
+    id: 'dept_fc_' + (++finColIdCounter),
+    name: name,
+    type: 'valoare', 
+    value: 0
+  });
+};
+
+const removeFinColFromDeptRow = (rowIndex, colId) => {
+  departmentHrRows.value[rowIndex].finColumns = departmentHrRows.value[rowIndex].finColumns.filter(c => c.id !== colId);
+};
+
+// --- LOGICĂ DE CALCUL FINANCIAR ---
+
+// Calcul pentru un rând de INSTITUȚIE
+const calculateInstRowTotal = (row) => {
+  let total = 0;
+  const safeColumns = row.finColumns || []; // PLASĂ DE SIGURANȚĂ
+  // Căutăm prima coloană de tip 'valoare' din rând (va fi baza pentru procente)
+  const baseCol = safeColumns.find(c => c.type === 'valoare');
+  const baseValue = baseCol ? (parseFloat(baseCol.value) || 0) : 0;
+
+  safeColumns.forEach(col => {
+    const val = parseFloat(col.value) || 0;
+    if (col.type === 'valoare') {
+      total += val * (row.ocupate || 0); // Valoare x Ocupate
+    } else if (col.type === 'procent') {
+      total += (baseValue * (val / 100)) * (row.ocupate || 0); // (Baza x Procent / 100) x Ocupate
+    }
+    // Dacă e 'text', nu se face niciun calcul
+  });
+  return total;
+};
+
+// Total general pentru toate rândurile de INSTITUȚIE
+const getInstNodeFinTotal = () => {
+  let grandTotal = 0;
+  hrRows.value.forEach(row => { grandTotal += calculateInstRowTotal(row); });
+  return grandTotal;
+};
+
+// Total general specific pentru PANOU PROFIL (citește din userHrData, nu din hrRows)
+const getProfileFinTotal = () => {
+  let grandTotal = 0;
+  userHrData.value.forEach(row => { grandTotal += calculateInstRowTotal(row); });
+  return grandTotal;
+};
+
+// Total general specific pentru PANOU PROFIL DEPARTAMENT
+const getDeptProfileFinTotal = () => {
+  let grandTotal = 0;
+  departmentProfileHrData.value.forEach(row => { grandTotal += calculateDeptRowTotal(row); });
+  return grandTotal;
+};
+
+// Calcul pentru un rând de DEPARTAMENT
+const calculateDeptRowTotal = (row) => {
+  let total = 0;
+  const safeColumns = row.finColumns || []; // PLASĂ DE SIGURANȚĂ
+  const baseCol = safeColumns.find(c => c.type === 'valoare');
+  const baseValue = baseCol ? (parseFloat(baseCol.value) || 0) : 0;
+
+  safeColumns.forEach(col => {
+    const val = parseFloat(col.value) || 0;
+    if (col.type === 'valoare') {
+      total += val * (row.ocupate || 0);
+    } else if (col.type === 'procent') {
+      total += (baseValue * (val / 100)) * (row.ocupate || 0);
+    }
+  });
+  return total;
+};
+
+// Total general pentru toate rândurile de DEPARTAMENT
+const getDeptNodeFinTotal = () => {
+  let grandTotal = 0;
+  departmentHrRows.value.forEach(row => { grandTotal += calculateDeptRowTotal(row); });
+  return grandTotal;
+};
+
+// --- GENERARE AUTOMATĂ CAPETE DE TABEL (COMPUTED) ---
+
+// Extrage toate coloanele unice din tabelul de INSTITUȚII
+const masterInstFinColumns = computed(() => {
+  const colsMap = new Map();
+  hrRows.value.forEach(row => {
+    const safeColumns = row.finColumns || []; // PLASĂ DE SIGURANȚĂ
+    safeColumns.forEach(col => {
+      if (!colsMap.has(col.id)) {
+        colsMap.set(col.id, { id: col.id, name: col.name });
+      }
+    });
+  });
+  return Array.from(colsMap.values());
+});
+
+// Extrage toate coloanele unice din tabelul de DEPARTEMENTE
+
+const masterDeptFinColumns = computed(() => {
+  const colsMap = new Map();
+  departmentHrRows.value.forEach(row => {
+    const safeColumns = row.finColumns || []; // PLASĂ DE SIGURANȚĂ
+    safeColumns.forEach(col => {
+      if (!colsMap.has(col.id)) {
+        colsMap.set(col.id, { id: col.id, name: col.name });
+      }
+    });
+  });
+  return Array.from(colsMap.values());
+});
+
 const addSporRow = () => {
   roleSporuriRows.value.push({ nume: '' });
 };
 const removeSporRow = (index) => {
   roleSporuriRows.value.splice(index, 1);
+};
+
+// --- LOGICĂ COLOANE FINANCIARE PENTRU ROL ---
+const roleFinColumns = ref([]); // Array-ul care va ține coloanele orizontale
+
+const addRoleFinCol = () => {
+  const name = prompt("Numele venitului (ex: Salariu Brut, Spor conducere, Tichete de masă):");
+  if (!name) return;
+  roleFinColumns.value.push({
+    id: 'role_fc_' + (++finColIdCounter),
+    name: name,
+    type: 'valoare', // Implicit: valoare
+    value: 0
+  });
+};
+
+const removeRoleFinCol = (colId) => {
+  roleFinColumns.value = roleFinColumns.value.filter(c => c.id !== colId);
+};
+
+// Calculul totalului pentru ROL (nu se înmulțește cu Ocupate, e o singură persoană)
+const getRoleTotal = () => {
+  let total = 0;
+  // Căutăm prima coloană de tip 'valoare' (ex: Salariul de bază) ca referință pentru procente
+  const baseCol = roleFinColumns.value.find(c => c.type === 'valoare');
+  const baseValue = baseCol ? (parseFloat(baseCol.value) || 0) : 0;
+
+  roleFinColumns.value.forEach(col => {
+    const val = parseFloat(col.value) || 0;
+    if (col.type === 'valoare') {
+      total += val; // Adunăm direct valoarea
+    } else if (col.type === 'procent') {
+      total += (baseValue * (val / 100)); // Calculăm procentul din baza de referință
+    }
+    // 'text' se ignoră la calcul
+  });
+  return total;
+};
+
+// Datele financiare extrase sigur pentru afișare în PANOU PROFIL ROL
+const profileRoleFinCols = computed(() => {
+  return selectedRoleData.value?.metadata?.role_fin_columns || [];
+});
+
+// Calculul totalului specific pentru PANOU PROFIL ROL
+const getProfileRoleTotal = () => {
+  let total = 0;
+  const cols = profileRoleFinCols.value;
+  const baseCol = cols.find(c => c.type === 'valoare');
+  const baseValue = baseCol ? (parseFloat(baseCol.value) || 0) : 0;
+
+  cols.forEach(col => {
+    const val = parseFloat(col.value) || 0;
+    if (col.type === 'valoare') total += val;
+    else if (col.type === 'procent') total += (baseValue * (val / 100));
+  });
+  return total;
 };
 
 // Funcție ajutătoare pentru a aduce datele HR când edităm
@@ -483,7 +725,8 @@ const fetchHrData = async (nodeId) => {
       functie: row.functie || '',
       ocupate: row.pozitii_ocupate || 0,
       vacante: row.pozitii_vacante || 0,
-      statut: row.statut || 'Activ'
+      statut: row.statut || 'Activ',
+      finColumns: row.fin_columns || [] // PRELUARE DIN DB (col. fin_columns)
     }));
   } else {
     hrRows.value = [];
@@ -783,9 +1026,9 @@ const handleAdminCreate = () => {
   if (!selectedAdminNode.value) return;
   adminAction.value = 'create';
           adminFormData.value = { nume: '', tip_institutie: '', news: '', relatie: '', is_institution: true, is_department: false };  
-  hrRows.value = []; // ADAUGAT: Golește rândurile vechi
-    hrRows.value = []; 
-  sourceRows.value = []; // ADAUGAT
+  hrRows.value = []; 
+  sourceRows.value = []; 
+  roleFinColumns.value = []; // GOLIM COLOANELE FINANCIARE ROL
   adminMessage.value = { text: '', type: '' };
 };
 
@@ -839,18 +1082,21 @@ const handleAdminEdit = async () => {
           } else {
       roleSporuriRows.value = [];
     }
+ // Încărcăm coloanele financiare pentru ROL
+    roleFinColumns.value = nodeData.metadata?.role_fin_columns || [];
 
     // Preluare date specifice DEPARTAMENT din metadata
     adminFormData.value.department_rof = nodeData.metadata?.rof || '';
      adminFormData.value.calitate_bugetara = nodeData.metadata?.calitate_bugetara || '';
     
-    if (nodeData.metadata?.hr_departament && Array.isArray(nodeData.metadata.hr_departament)) {
+          if (nodeData.metadata?.hr_departament && Array.isArray(nodeData.metadata.hr_departament)) {
       departmentHrRows.value = nodeData.metadata.hr_departament.map(h => ({
         functie: h.functie || '',
         total: h.total || 0,
         ocupate: h.ocupate || 0,
         vacante: h.vacante || 0,
-        observatii: h.observatii || ''
+        observatii: h.observatii || '',
+        finColumns: h.finColumns || [] // PRELUARE DIN DB (metadata)
       }));
     } else {
       departmentHrRows.value = [];
@@ -875,8 +1121,36 @@ const saveAdminNode = async () => {
   const nodeId = String(selectedAdminNode.value.id);
   let error = null;
   let data = null;
-  let finalImageUrl = null;
+    let finalImageUrl = null;
+  let finalLogoUrl = null; // <-- NOU: Variabila pentru logo
 
+  // 1. Gestionarea Imaginii (rămâne în metadata)
+  if (adminAction.value === 'edit') {
+    const nodeInfo = allNodesList.value.find(n => String(n.id) === nodeId);
+    if (selectedFile.value) {
+      try { finalImageUrl = await uploadImage(selectedFile.value); } 
+      catch (e) { isSavingNode.value = false; adminMessage.value = { text: 'Eroare poză: ' + e.message, type: 'error' }; return; }
+    } else if (removeImage.value) { finalImageUrl = null; } 
+    else { finalImageUrl = nodeInfo?.metadata?.imagine || null; }
+  }
+
+  // --- NOU: 1.1 Gestionarea Logo-ului ---
+  if (adminAction.value === 'edit') {
+    const nodeInfo = allNodesList.value.find(n => String(n.id) === nodeId);
+    if (selectedLogoFile.value) {
+      try { finalLogoUrl = await uploadImage(selectedLogoFile.value); } 
+      catch (e) { isSavingNode.value = false; adminMessage.value = { text: 'Eroare logo: ' + e.message, type: 'error' }; return; }
+    } else if (removeLogo.value) { 
+      finalLogoUrl = null; 
+    } else { 
+      finalLogoUrl = nodeInfo?.metadata?.logo_url || null; 
+    }
+  } else if (adminAction.value === 'create') {
+     if (selectedLogoFile.value) {
+      try { finalLogoUrl = await uploadImage(selectedLogoFile.value); } 
+      catch (e) { isSavingNode.value = false; adminMessage.value = { text: 'Eroare logo: ' + e.message, type: 'error' }; return; }
+    }
+  }
   // 1. Gestionarea Imaginii (rămâne în metadata)
   if (adminAction.value === 'edit') {
     const nodeInfo = allNodesList.value.find(n => String(n.id) === nodeId);
@@ -910,6 +1184,7 @@ const saveAdminNode = async () => {
       metadata: { 
         tip: adminFormData.value.tip_institutie, 
         imagine: finalImageUrl, 
+        logo_url: finalLogoUrl,
         news: adminFormData.value.news, 
         relatie_superioara: adminFormData.value.relatie,
         // Salvare date ROL
@@ -917,8 +1192,9 @@ const saveAdminNode = async () => {
         baza_legala: adminFormData.value.role_baza_legala,
         reglementare: adminFormData.value.role_reglementare,
         gradatie_treapta: adminFormData.value.role_gradatie_treapta,
-        sporuri: roleSporuriRows.value,
-               // Salvare date DEPARTAMENT
+                      sporuri: roleSporuriRows.value,
+              role_fin_columns: roleFinColumns.value, // SALVARE COLOANE FINANCIARE ROL
+                     // Salvare date DEPARTAMENT
         rof: adminFormData.value.department_rof,
         hr_departament: departmentHrRows.value,
         // Salvare date INSTITUȚIE
@@ -934,20 +1210,21 @@ is_department: adminFormData.value.is_department
     data = res.data;
 
     // 2.1. Salvăm rândurile de HR (dacă există) folosind ID-ul nodului nou creat
-    if (!error && data && data[0] && hrRows.value.length > 0) {
-      const hrInserts = hrRows.value.map(row => ({
-        organogram_node_id: data[0].id, // Legăm de noul nod
-        functie: row.functie,
-        pozitii_ocupate: row.ocupate,
-        pozitii_vacante: row.vacante,
-        salariu_minim: null,
-        salariu_maxim: null,
-        statut: row.statut
-      }));
-      const { error: hrErr } = await supabase.from('date_joburi').insert(hrInserts); // MODIFICAT
-      if (hrErr) console.error('Eroare HR Create:', hrErr.message); // ADAUGAT
-    }
-
+    
+        if (!error && data && data[0] && hrRows.value.length > 0) {
+          const hrInserts = hrRows.value.map(row => ({
+            organogram_node_id: data[0].id,
+            functie: row.functie,
+            pozitii_ocupate: row.ocupate,
+            pozitii_vacante: row.vacante,
+            salariu_minim: null,
+            salariu_maxim: null,
+            statut: row.statut,
+            fin_columns: row.finColumns || [] // SALVARE COLOANE FINANCIARE
+          }));
+          const { error: hrErr } = await supabase.from('date_joburi').insert(hrInserts);
+          if (hrErr) console.error('Eroare HR Create:', hrErr.message);
+        }
         // 2.2. Salvăm rândurile de Surse (dacă există)
     if (!error && data && data[0] && sourceRows.value.length > 0) {
       const sourceInserts = sourceRows.value.map(row => ({
@@ -978,6 +1255,7 @@ is_department: adminFormData.value.is_department
             metadata: { 
               tip: adminFormData.value.tip_institutie, 
               imagine: finalImageUrl, 
+              logo_url: finalLogoUrl,
               news: adminFormData.value.news, 
               relatie_superioara: adminFormData.value.relatie,
               calitate_bugetara: adminFormData.value.calitate_bugetara
@@ -1001,14 +1279,16 @@ is_department: adminFormData.value.is_department
           website: adminFormData.value.website,
           metadata: { 
             tip: adminFormData.value.tip_institutie, 
-            imagine: finalImageUrl, 
+            imagine: finalImageUrl,
+            logo_url: finalLogoUrl, 
             news: adminFormData.value.news, 
             relatie_superioara: adminFormData.value.relatie,
             cod_cor: adminFormData.value.role_cod_cor,
             baza_legala: adminFormData.value.role_baza_legala,
             reglementare: adminFormData.value.role_reglementare,
             gradatie_treapta: adminFormData.value.role_gradatie_treapta,
-            sporuri: roleSporuriRows.value,
+           sporuri: roleSporuriRows.value,
+            role_fin_columns: roleFinColumns.value, // SALVARE COLOANE FINANCIARE ROL
             rof: adminFormData.value.department_rof,
             hr_departament: departmentHrRows.value,
         calitate_bugetara: adminFormData.value.calitate_bugetara
@@ -1025,6 +1305,7 @@ is_department: adminFormData.value.is_department
       if (!error) {
         await supabase.from('date_joburi').delete().eq('organogram_node_id', nodeId);
         
+        
         if (hrRows.value.length > 0) {
           const hrInserts = hrRows.value.map(row => ({
             organogram_node_id: nodeId,
@@ -1033,10 +1314,11 @@ is_department: adminFormData.value.is_department
             pozitii_vacante: row.vacante,
             salariu_minim: null,
             salariu_maxim: null,
-            statut: row.statut
+            statut: row.statut,
+            fin_columns: row.finColumns || [] // SALVARE COLOANE FINANCIARE
           }));
-           const { error: hrErr } = await supabase.from('date_joburi').insert(hrInserts); // MODIFICAT
-          if (hrErr) console.error('Eroare HR Edit:', hrErr.message); // ADAUGAT
+           const { error: hrErr } = await supabase.from('date_joburi').insert(hrInserts);
+          if (hrErr) console.error('Eroare HR Edit:', hrErr.message);
         }
       }
 
@@ -1086,7 +1368,8 @@ is_department: adminFormData.value.is_department
             website: adminFormData.value.website,
                     metadata: { 
         tip: adminFormData.value.tip_institutie, 
-        imagine: finalImageUrl, 
+        imagine: finalImageUrl,
+        logo_url: finalLogoUrl, 
         news: adminFormData.value.news, 
         relatie_superioara: adminFormData.value.relatie,
         // Salvare date ROL
@@ -1094,19 +1377,20 @@ is_department: adminFormData.value.is_department
         baza_legala: adminFormData.value.role_baza_legala,
         reglementare: adminFormData.value.role_reglementare,
         gradatie_treapta: adminFormData.value.role_gradatie_treapta,
-        sporuri: roleSporuriRows.value,
-                // Salvare date DEPARTAMENT
-        rof: adminFormData.value.department_rof,
-        hr_departament: departmentHrRows.value,
-        // Salvare date INSTITUȚIE
-        calitate_bugetara: adminFormData.value.calitate_bugetara
-      }, 
-      };
-        }
-      }
-      elements.value = buildElements(allNodesList.value, currentRootId.value);
-      nextTick(() => updateLayout());
-    }
+                     sporuri: roleSporuriRows.value,
+              role_fin_columns: roleFinColumns.value, // FIX: Actualizare locală pentru Profil
+                      // Salvare date DEPARTAMENT
+              rof: adminFormData.value.department_rof,
+              hr_departament: departmentHrRows.value,
+              // Salvare date INSTITUȚIE
+              calitate_bugetara: adminFormData.value.calitate_bugetara
+            }, 
+          };
+            }
+            }
+               elements.value = buildElements(allNodesList.value, currentRootId.value);
+              nextTick(() => updateLayout());
+            }
     
     setTimeout(() => { adminAction.value = null; adminMessage.value = { text: '', type: '' }; }, 1500);
   }
@@ -1885,6 +2169,18 @@ const handleDeleteAccount = async () => {
           <button class="remove-img-btn" @click="imagePreview = null; removeImage = true" title="Șterge">✕</button>
         </div>
 
+        <!-- Upload Logo (Doar la Editare) -->
+        <div v-if="adminAction === 'edit'" class="upload-row">
+          <label>Logo Instituție:</label>
+          <input type="file" accept="image/*" @change="onLogoChange" :disabled="isSavingNode" />
+        </div>
+        <div v-if="logoPreview" class="image-preview-container">
+          <img :src="logoPreview" alt="Preview Logo" class="image-preview" />
+          <button class="remove-img-btn" @click="logoPreview = null; removeLogo = true" title="Șterge Logo">✕</button>
+        </div>
+
+
+
         <!-- SECȚIUNEA: CE E NOU? -->
         <div class="news-admin-section">
           <label>Știri / Ce e nou?</label>
@@ -1892,40 +2188,80 @@ const handleDeleteAccount = async () => {
         </div>
 
         <!-- SECȚIUNEA 2: DATE PERSONAL -->
-        <div class="form-bottom-half">
-          <div class="hr-header">
-            <span>Date Personal</span>
-            <button class="add-hr-btn" @click="addHrRow" :disabled="isSavingNode">+ Adaugă Rând</button>
+<div class="form-bottom-half">
+  <div class="hr-header">
+    <span>Date Personal</span>
+    <button class="add-hr-btn" @click="addHrRow" :disabled="isSavingNode">+ Adaugă Rând</button>
+  </div>
+  <table class="hr-table">
+    <thead>
+      <tr>
+        <th>Nr. Crt.</th>
+        <th>Denumire Post</th>
+        <th>Ocupate</th>
+        <th>Vacante</th>
+        <th>Total posturi</th>
+        <th>Statut</th>
+        <!-- COLOANE DINAMICE GENERATE AUTOMAT -->
+        <th v-for="col in masterInstFinColumns" :key="col.id" style="min-width: 140px; font-size: 11px;">{{ col.name }}</th>
+        <!-- BUTOANE FINAL -->
+        <th style="width: 40px;"></th>
+        <th style="width: 100px;"></th>
+        <th style="width: 100px; background: #f0f9ff; color: #0284c7;">Total Rând</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr v-for="(row, index) in hrRows" :key="index">
+        <td>{{ index + 1 }}</td>
+        <td><input type="text" v-model="row.functie" placeholder="Nume post" :disabled="isSavingNode" /></td>
+        <td><input type="number" v-model.number="row.ocupate" min="0" :disabled="isSavingNode" /></td>
+        <td><input type="number" v-model.number="row.vacante" min="0" :disabled="isSavingNode" /></td>
+        <td><input type="number" :value="(row.ocupate || 0) + (row.vacante || 0)" disabled /></td>
+        <td><input type="text" v-model="row.statut" placeholder="Activ / Link concurs" :disabled="isSavingNode" /></td>
+        
+        <!-- RANDURI COLOANE DINAMICE -->
+        <td v-for="col in row.finColumns" :key="col.id" style="padding: 4px; background: #fafafa;">
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <input type="text" v-model="col.name" placeholder="Nume venit" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
+            <select v-model="col.type" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode">
+              <option value="valoare">Valoare (Lei)</option>
+              <option value="procent">Procent (%)</option>
+              <option value="text">Text</option>
+            </select>
+            <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
+            <input v-else type="number" v-model.number="col.value" placeholder="0" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
+            <button @click="removeFinColFromRow(index, col.id)" style="font-size: 9px; color: red; cursor: pointer; align-self: flex-end;" :disabled="isSavingNode">Șterge coloană</button>
           </div>
-          <table class="hr-table">
-            <thead>
-              <tr>
-                <th>Nr. Crt.</th>
-                <th>Denumire Post</th>
-                <th>Ocupate</th>
-                <th>Vacante</th>
-                <th>Total posturi</th>
-                <th>Statut</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, index) in hrRows" :key="index">
-                <td>{{ index + 1 }}</td>
-                <td><input type="text" v-model="row.functie" placeholder="Nume post" :disabled="isSavingNode" /></td>
-                <td><input type="number" v-model.number="row.ocupate" min="0" :disabled="isSavingNode" /></td>
-                <td><input type="number" v-model.number="row.vacante" min="0" :disabled="isSavingNode" /></td>
-                <td><input type="number" :value="(row.ocupate || 0) + (row.vacante || 0)" disabled /></td>
-                <td><input type="text" v-model="row.statut" placeholder="Activ / Link concurs" :disabled="isSavingNode" /></td>
-                <td><button class="remove-row-btn" @click="removeHrRow(index)" :disabled="isSavingNode">✕</button></td>
-              </tr>
-              <tr v-if="hrRows.length === 0">
-                <td colspan="7" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        </td>
 
+        <!-- BUTON ȘTERGE RÂND -->
+        <td><button class="remove-row-btn" @click="removeHrRow(index)" :disabled="isSavingNode">✕</button></td>
+        
+        <!-- BUTON ADAUGĂ VENIT -->
+        <td><button class="add-hr-btn" @click="addFinColToRow(index)" :disabled="isSavingNode" style="font-size: 10px; padding: 4px;">+ Venit</button></td>
+
+        <!-- TOTAL CALCULAT LIVE -->
+        <td style="text-align: center; font-weight: bold; font-size: 12px; background: #f0f9ff; color: #0284c7;">
+          {{ calculateInstRowTotal(row) }} RON
+        </td>
+      </tr>
+      
+      <tr v-if="hrRows.length === 0">
+        <!-- Am actualizat colspan-ul să se extindă automat și peste noile coloane -->
+        <td :colspan="9 + masterInstFinColumns.length" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
+      </tr>
+    </tbody>
+    <!-- OPȚIONAL: Total General la baza tabelului -->
+    <tfoot v-if="hrRows.length > 0">
+      <tr>
+        <td :colspan="8 + masterInstFinColumns.length" style="text-align: right; font-weight: bold; padding: 10px;">TOTAL GENERAL INSTITUȚIE:</td>
+        <td style="text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; background: #fef2f2;">
+          {{ getInstNodeFinTotal() }} RON
+        </td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
         <!-- SECȚIUNEA 3: SURSE INFORMAȚII -->
         <div class="form-bottom-half">
           <div class="hr-header">
@@ -1985,7 +2321,7 @@ const handleDeleteAccount = async () => {
             <span>Structură Resurse Umane</span>
             <button class="add-hr-btn" @click="addDepartmentHrRow" :disabled="isSavingNode">+ Adaugă Rând</button>
           </div>
-          <table class="hr-table">
+                 <table class="hr-table">
             <thead>
               <tr>
                 <th style="width: 60px;">Nr. Crt.</th>
@@ -1994,7 +2330,12 @@ const handleDeleteAccount = async () => {
                 <th style="width: 100px;">Ocupate</th>
                 <th style="width: 100px;">Vacante</th>
                 <th>Observații</th>
+                <!-- COLOANE DINAMICE GENERATE AUTOMAT -->
+                <th v-for="col in masterDeptFinColumns" :key="col.id" style="min-width: 140px; font-size: 11px;">{{ col.name }}</th>
+                <!-- BUTOANE FINAL -->
                 <th style="width: 50px;"></th>
+                <th style="width: 100px;"></th>
+                <th style="width: 100px; background: #f0fdf4; color: #16a34a;">Total Rând</th>
               </tr>
             </thead>
             <tbody>
@@ -2005,13 +2346,49 @@ const handleDeleteAccount = async () => {
                 <td><input type="number" v-model.number="row.ocupate" min="0" :disabled="isSavingNode" /></td>
                 <td><input type="number" v-model.number="row.vacante" min="0" :disabled="isSavingNode" /></td>
                 <td><input type="text" v-model="row.observatii" placeholder="Detalii" :disabled="isSavingNode" /></td>
+                
+                <!-- RANDURI COLOANE DINAMICE -->
+                <td v-for="col in row.finColumns" :key="col.id" style="padding: 4px; background: #f9fafb;">
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <input type="text" v-model="col.name" placeholder="Nume venit" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
+                    <select v-model="col.type" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode">
+                      <option value="valoare">Valoare (Lei)</option>
+                      <option value="procent">Procent (%)</option>
+                      <option value="text">Text</option>
+                    </select>
+                    <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
+                    <input v-else type="number" v-model.number="col.value" placeholder="0" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
+                    <button @click="removeFinColFromDeptRow(index, col.id)" style="font-size: 9px; color: red; cursor: pointer; align-self: flex-end;" :disabled="isSavingNode">Șterge coloană</button>
+                  </div>
+                </td>
+
+                <!-- BUTON ȘTERGE RÂND -->
                 <td><button class="remove-row-btn" @click="removeDepartmentHrRow(index)" :disabled="isSavingNode">✕</button></td>
+                
+                <!-- BUTON ADAUGĂ VENIT -->
+                <td><button class="add-hr-btn" @click="addFinColToDeptRow(index)" :disabled="isSavingNode" style="font-size: 10px; padding: 4px;">+ Venit</button></td>
+
+                <!-- TOTAL CALCULAT LIVE -->
+                <td style="text-align: center; font-weight: bold; font-size: 12px; background: #f0fdf4; color: #16a34a;">
+                  {{ calculateDeptRowTotal(row) }} RON
+                </td>
               </tr>
+              
               <tr v-if="departmentHrRows.length === 0">
-                <td colspan="7" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
+                <!-- Am actualizat colspan-ul să se extindă automat și peste noile coloane -->
+                <td :colspan="9 + masterDeptFinColumns.length" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
               </tr>
             </tbody>
-          </table>
+            <!-- TOTAL GENERAL DEPARTAMENT -->
+            <tfoot v-if="departmentHrRows.length > 0">
+              <tr>
+                <td :colspan="8 + masterDeptFinColumns.length" style="text-align: right; font-weight: bold; padding: 10px;">TOTAL GENERAL DEPARTAMENT:</td>
+                <td style="text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; background: #fef2f2;">
+                  {{ getDeptNodeFinTotal() }} RON
+                </td>
+              </tr>
+            </tfoot>
+          </table> 
         </div>
       </template>
 
@@ -2051,33 +2428,56 @@ const handleDeleteAccount = async () => {
           <input type="text" v-model="adminFormData.role_gradatie_treapta" placeholder="ex: Gradația 3, Treapta I" :disabled="isSavingNode" />
         </div>
 
-
-        <!-- SECȚIUNEA 2: VENITURI (Sporuri / Indemnizații) -->
+        <!-- SECȚIUNEA 2: VENITURI ROL (COLOANE DINAMICE) -->
         <div class="form-bottom-half">
           <div class="hr-header">
-            <span>Venituri (Sporuri / Indemnizații)</span>
-            <button class="add-hr-btn" @click="addSporRow" :disabled="isSavingNode">+ Adaugă Venit</button>
+            <span>Venituri Rol</span>
+            <button class="add-hr-btn" @click="addRoleFinCol" :disabled="isSavingNode">+ Adaugă Venit</button>
           </div>
-          <table class="hr-table">
+          
+          <table class="hr-table" v-if="roleFinColumns.length > 0">
             <thead>
               <tr>
-                <th style="width: 60px;">Nr. Crt.</th>
-                <th>Denumire Spor / Indemnizație / Alt venit</th>
-                <th style="width: 50px;"></th>
+                <th v-for="col in roleFinColumns" :key="col.id" style="min-width: 160px; font-size: 11px; background: #fef3c7; color: #92400e;">
+                  {{ col.name }}
+                </th>
+                <th style="width: 50px; background: #fef3c7;"></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, index) in roleSporuriRows" :key="'spor-'+index">
-                <td style="text-align: center;">{{ index + 1 }}</td>
-                <td><input type="text" v-model="row.nume" placeholder="ex: Spor de risc, Indemnizație de conducere" :disabled="isSavingNode" /></td>
-                <td><button class="remove-row-btn" @click="removeSporRow(index)" :disabled="isSavingNode">✕</button></td>
-              </tr>
-              <tr v-if="roleSporuriRows.length === 0">
-                <td colspan="3" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate venituri</td>
+              <tr>
+                <!-- Pentru fiecare coloană creată, afișăm setările și inputul -->
+                <td v-for="col in roleFinColumns" :key="col.id" style="padding: 4px; background: #fffbeb; vertical-align: top;">
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <select v-model="col.type" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode">
+                      <option value="valoare">Valoare (Lei)</option>
+                      <option value="procent">Procent (%)</option>
+                      <option value="text">Text</option>
+                    </select>
+                    <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." style="font-size: 12px; padding: 4px; width: 100%;" :disabled="isSavingNode" />
+                    <input v-else type="number" v-model.number="col.value" placeholder="0" style="font-size: 12px; padding: 4px; width: 100%;" :disabled="isSavingNode" />
+                    <button @click="removeRoleFinCol(col.id)" style="font-size: 9px; color: red; cursor: pointer; align-self: flex-end;" :disabled="isSavingNode">Șterge</button>
+                  </div>
+                </td>
+                <td></td> <!-- Căsuță goală pentru aliniere -->
               </tr>
             </tbody>
+            <tfoot>
+              <tr>
+                <td :colspan="roleFinColumns.length" style="text-align: right; font-weight: bold; padding: 10px; border-top: 2px solid #f59e0b;">TOTAL VENITURI ROL:</td>
+                <td style="text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; background: #fef2f2; border-top: 2px solid #f59e0b;">
+                  {{ getRoleTotal() }} RON
+                </td>
+              </tr>
+            </tfoot>
           </table>
+          
+          <!-- Mesaj alternativ dacă nu sunt coloane -->
+          <div v-else style="text-align:center; color:#94a3b8; padding: 20px; border: 1px dashed #cbd5e1; border-radius: 8px;">
+            Nu au fost adăugate venituri. Apasă pe "+ Adaugă Venit".
+          </div>
         </div>
+        
       </template>
 
       <!-- MESAJ ȘI BUTOANE (Comune pentru ambele formulare) -->
@@ -2121,26 +2521,36 @@ const handleDeleteAccount = async () => {
       </div>
     </transition>
 
-        <!-- PANOU PROFIL INSTITUȚIONAL (Pasul 2 - HTML static de test) -->
+     
+    <!-- PANOU PROFIL INSTITUȚIONAL -->
     <transition name="slide-panel">
       <div v-if="showProfilePanel" class="panel-left">
-            <div class="panel-header">
-        <h1>Profil Instituțional</h1>
-        <img v-if="selectedUserData?.metadata?.imagine" :src="selectedUserData.metadata.imagine" class="panel-thumbnail" />
-        <button class="panel-close-btn" @click="closeProfilePanel">✕</button>
-            <!-- BUTON EXPORT PDF PROFIL -->
-      <div class="profile-pdf-actions">
-        <button class="btn-export-profile-pdf" @click="exportProfilePDF">Exportă Profil PDF</button>
-      </div>
-    </div>
+        <div class="panel-header">
+          <h1>Profil Instituțional</h1>
+          <img v-if="selectedUserData?.metadata?.imagine" :src="selectedUserData.metadata.imagine" class="panel-thumbnail" />
+          <button class="panel-close-btn" @click="closeProfilePanel">✕</button>
+          <!-- BUTON EXPORT PDF PROFIL -->
+          <div class="profile-pdf-actions">
+            <button class="btn-export-profile-pdf" @click="exportProfilePDF">Exportă Profil PDF</button>
+          </div>
+        </div>
+
+            <!-- BANDA LOGO INSTITUȚIE -->
+        <div v-if="selectedUserData?.metadata?.logo_url" class="profile-logo-band">
+          <img :src="selectedUserData.metadata.logo_url" alt="Logo" class="logo-medalion" />
+        </div>
         
-              <div class="panel-body" id="user-profile-pdf-section">
-                          <!-- HEADER ȘI POZĂ PENTRU PDF (Ascunse pe ecran) -->
-            <div id="pdf-header-section" class="pdf-header-section">
-              <h1>Profil Instituțional</h1>
-              <img v-if="selectedUserData?.metadata?.imagine" :src="selectedUserData.metadata.imagine" class="pdf-header-img" />
+        <div class="panel-body" id="user-profile-pdf-section">
+          <!-- HEADER ȘI POZĂ PENTRU PDF (Ascunse pe ecran) -->
+          <div id="pdf-header-section" class="pdf-header-section">
+            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+              <img v-if="selectedUserData?.metadata?.logo_url" :src="selectedUserData.metadata.logo_url" style="width: 60px; height: 60px; object-fit: contain;" />
+              <h1 style="margin: 0;">Profil Instituțional</h1>
             </div>
-                   <!-- 1. Identitate & Contact -->
+            <img v-if="selectedUserData?.metadata?.imagine" :src="selectedUserData.metadata.imagine" class="pdf-header-img" />
+          </div>
+          
+          <!-- 1. Identitate & Contact -->
           <div class="profile-section" v-if="selectedUserData">
             <div class="section-title">Identitate & Contact</div>
             <div class="contact-grid">
@@ -2149,12 +2559,11 @@ const handleDeleteAccount = async () => {
               <span class="c-label">C.U.I.</span> <div class="c-value">{{ selectedUserData.cui || '-' }}</div>
               <span class="c-label">Adresă</span> <div class="c-value">{{ selectedUserData.adresa || '-' }}</div>
               <span class="c-label">Website</span> <div class="c-value" style="color: #2563eb;">{{ selectedUserData.website || '-' }}</div>
-                            <span class="c-label">Program cu publicul</span> <div class="c-value">{{ selectedUserData?.program || '-' }}</div>
+              <span class="c-label">Program cu publicul</span> <div class="c-value">{{ selectedUserData?.program || '-' }}</div>
               <span class="c-label">Telefon</span> <div class="c-value">{{ selectedUserData?.telefon || '-' }}</div>
-             <span class="c-label">E-mail</span> <div class="c-value">{{ selectedUserData?.email || '-' }}</div>
+              <span class="c-label">E-mail</span> <div class="c-value">{{ selectedUserData?.email || '-' }}</div>
             </div>
           </div>
-
 
           <!-- 1.5 Calitate Bugetară -->
           <div class="profile-section" v-if="selectedUserData">
@@ -2164,7 +2573,6 @@ const handleDeleteAccount = async () => {
             </div>
           </div>
 
-
           <!-- 2. Rol & Bază Legală -->
           <div class="profile-section" v-if="selectedUserData">
             <div class="section-title">Rol & Bază Legală</div>
@@ -2173,7 +2581,7 @@ const handleDeleteAccount = async () => {
             </p>
           </div>
 
-                  <!-- 3. Relații Instituționale -->
+          <!-- 3. Relații Instituționale -->
           <div class="profile-section" v-if="selectedUserData">
             <div class="section-title">Relații Instituționale</div>
             <div class="relation-box">
@@ -2182,7 +2590,7 @@ const handleDeleteAccount = async () => {
             </div>
           </div>
 
-                             <!-- 4. Structură & Resurse Umane -->
+          <!-- 4. Structură & Resurse Umane -->
           <div class="profile-section" v-if="selectedUserData">
             <div class="section-title">Structură & Resurse Umane</div>
             <div class="metric-row">
@@ -2228,9 +2636,40 @@ const handleDeleteAccount = async () => {
               </table>
             </div>
           </div>
-          
 
-                        <!-- 5. Ce e nou? -->
+                    <!-- 4.1. Venituri & Calcule Financiare -->
+          <div class="profile-section" v-if="userHrData.length > 0 && userHrData.some(r => r.finColumns && r.finColumns.length > 0)">
+            <div class="section-title">Venituri & Calcul Financiar</div>
+            
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <!-- Folosim <template> pentru v-for pentru a evita conflictul cu v-if -->
+              <template v-for="(row, rowIndex) in userHrData" :key="'fin-display-'+rowIndex">
+                <div v-if="row.finColumns && row.finColumns.length > 0" style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; background: #f8fafc;">
+                  <div style="font-weight: bold; margin-bottom: 8px; color: #334155;">
+                    {{ row.functie || 'Post necunoscut' }} 
+                    <span style="font-weight: normal; font-size: 0.8rem; color: #64748b;">(Ocupate: {{ row.ocupate }})</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 15px; font-size: 0.85rem;">
+                    <div v-for="col in row.finColumns" :key="col.id">
+                      <span style="color: #64748b;">{{ col.name }}:</span> 
+                      <span v-if="col.type === 'text'" style="font-style: italic;">{{ col.value || '-' }}</span>
+                      <span v-else style="font-weight: 500;">{{ col.value || 0 }}{{ col.type === 'procent' ? ' %' : ' RON' }}</span>
+                    </div>
+                  </div>
+                  <div style="margin-top: 8px; text-align: right; font-weight: bold; color: #0284c7; border-top: 1px dashed #cbd5e1; padding-top: 5px;">
+                    Total post: {{ calculateInstRowTotal(row) }} RON
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- TOTAL GENERAL INSTITUȚIE -->
+            <div style="margin-top: 15px; text-align: right; font-size: 1.1rem; font-weight: bold; color: #dc2626; background: #fef2f2; padding: 10px; border-radius: 6px;">
+              TOTAL VENITURI INSTITUȚIE: {{ getProfileFinTotal() }} RON
+            </div>
+          </div>
+
+          <!-- 5. Ce e nou? -->
           <div class="profile-section" v-if="selectedUserData">
             <div class="section-title">Ce e nou?</div>
             <div v-if="selectedUserData.metadata && selectedUserData.metadata.news" class="news-item">
@@ -2240,7 +2679,8 @@ const handleDeleteAccount = async () => {
             <div v-else class="news-item">
               <div class="news-icon">📄</div>
               <div class="news-link" style="color: #94a3b8;">Momentan nu sunt știri introduse de admin.</div>
-                      </div>
+            </div>
+          </div>
 
           <!-- 6. Surse Informații -->
           <div class="profile-section" v-if="userSourceData.length > 0">
@@ -2270,8 +2710,8 @@ const handleDeleteAccount = async () => {
 
         </div>
       </div>
-    </div>
     </transition>
+
 
        <!-- PANOU PROFIL DEPARTAMENT -->
     <transition name="slide-panel">
@@ -2327,14 +2767,46 @@ const handleDeleteAccount = async () => {
                   <td colspan="6" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
                 </tr>
               </tbody>
-            </table>
+                       </table>
           </div>
-        </div>
 
-        <!-- BUTON EXPORT PDF -->
-        <div class="profile-pdf-actions">
-          <button class="btn-export-profile-pdf" @click="exportDepartmentPDF">Exportă Profil PDF</button>
-        </div>
+          <!-- 3.1. Venituri & Calcule Financiare Departament -->
+          <div class="profile-section" v-if="departmentProfileHrData.length > 0 && departmentProfileHrData.some(r => r.finColumns && r.finColumns.length > 0)">
+            <div class="section-title" style="color: #16a34a;">Venituri & Calcul Financiar</div>
+            
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <template v-for="(row, rowIndex) in departmentProfileHrData" :key="'fin-dep-display-'+rowIndex">
+                <div v-if="row.finColumns && row.finColumns.length > 0" style="border: 1px solid #bbf7d0; border-radius: 8px; padding: 10px; background: #f0fdf4;">
+                  <div style="font-weight: bold; margin-bottom: 8px; color: #334155;">
+                    {{ row.functie || 'Post necunoscut' }} 
+                    <span style="font-weight: normal; font-size: 0.8rem; color: #64748b;">(Ocupate: {{ row.ocupate }})</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 15px; font-size: 0.85rem;">
+                    <div v-for="col in row.finColumns" :key="col.id">
+                      <span style="color: #64748b;">{{ col.name }}:</span> 
+                      <span v-if="col.type === 'text'" style="font-style: italic;">{{ col.value || '-' }}</span>
+                      <span v-else style="font-weight: 500;">{{ col.value || 0 }}{{ col.type === 'procent' ? ' %' : ' RON' }}</span>
+                    </div>
+                  </div>
+                  <div style="margin-top: 8px; text-align: right; font-weight: bold; color: #16a34a; border-top: 1px dashed #86efac; padding-top: 5px;">
+                    Total post: {{ calculateDeptRowTotal(row) }} RON
+                  </div>
+                </div>
+              </template>
+            </div>
+
+                       <!-- TOTAL GENERAL DEPARTAMENT -->
+            <div style="margin-top: 30px; text-align: right; font-size: 1.1rem; font-weight: bold; color: #dc2626; background: #fef2f2; padding: 10px; border-radius: 6px; break-inside: avoid; page-break-inside: avoid;">
+              TOTAL VENITURI DEPARTAMENT: {{ getDeptProfileFinTotal() }} RON
+            </div>
+          </div>
+
+          <!-- BUTON EXPORT PDF -->
+          <div class="profile-pdf-actions" style="margin-top: 20px;">
+            <button class="btn-export-profile-pdf" @click="exportDepartmentPDF">Exportă Profil PDF</button>
+          </div>
+
+        </div> <!-- Închidere panel-body -->
       </div>
     </transition>
 
@@ -2385,45 +2857,40 @@ const handleDeleteAccount = async () => {
             </div>
           </div>
 
-          <!-- 5. Sporuri / Indemnizații -->
-          <div class="profile-section" v-if="selectedRoleData">
-            <div class="section-title">Sporuri / Indemnizații / Alte venituri</div>
-            <table class="sources-profile-table">
-              <thead>
-                <tr>
-                  <th>Nr. Crt.</th>
-                  <th>Denumire Spor / Indemnizație</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, index) in selectedRoleData.metadata?.sporuri || []" :key="index">
-                  <td style="text-align: center;">{{ index + 1 }}</td>
-                  <td>{{ row.nume || '-' }}</td>
-                </tr>
-                <tr v-if="!selectedRoleData.metadata?.sporuri || selectedRoleData.metadata.sporuri.length === 0">
-                  <td colspan="2" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate sporuri</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- 6. Program Audiențe -->
+               <!-- 6. Program Audiențe -->
           <div class="profile-section" v-if="selectedRoleData">
             <div class="section-title">Program Audiențe</div>
             <div class="c-value" style="background: #f8fafc; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
               {{ selectedRoleData.program || 'Nu este specificat' }}
             </div>
+                    </div>
+
+                  <!-- 5.1. Venituri & Calcul Financiar Rol -->
+          <div class="profile-section" v-if="profileRoleFinCols.length > 0">
+            <div class="section-title" style="color: #d97706;">Venituri & Calcul Financiar</div>
+            
+            <div style="display: flex; flex-wrap: wrap; gap: 20px; font-size: 0.95rem; margin-bottom: 15px; padding: 15px; background: #fffbeb; border-radius: 8px; border: 1px solid #fde68a;">
+              <div v-for="col in profileRoleFinCols" :key="col.id">
+                <span style="color: #92400e; font-weight: 500;">{{ col.name }}:</span> 
+                <span v-if="col.type === 'text'" style="font-style: italic; margin-left: 5px;">{{ col.value || '-' }}</span>
+                <span v-else style="font-weight: bold; margin-left: 5px;">{{ col.value || 0 }}{{ col.type === 'procent' ? ' %' : ' RON' }}</span>
+              </div>
+            </div>
+
+            <!-- TOTAL VENITURI ROL -->
+            <div style="text-align: right; font-size: 1.1rem; font-weight: bold; color: #dc2626; background: #fef2f2; padding: 10px; border-radius: 6px; break-inside: avoid; page-break-inside: avoid;">
+              TOTAL VENITURI ROL: {{ getProfileRoleTotal() }} RON
+            </div>
           </div>
 
-        </div>
+          <!-- BUTON EXPORT PDF -->
+          <div class="profile-pdf-actions" style="margin-top: 20px;">
+            <button class="btn-export-profile-pdf" @click="exportRolePDF">Exportă Profil PDF</button>
+          </div>
 
-        <!-- BUTON EXPORT PDF -->
-        <div class="profile-pdf-actions">
-          <button class="btn-export-profile-pdf" @click="exportRolePDF">Exportă Profil PDF</button>
-        </div>
+        </div> <!-- Închidere panel-body -->
       </div>
-    </transition>
-   
+    </transition>   
         <!-- POP-UP TABEL STRUCTURĂ H.R. -->
     <div 
       v-if="showHrPopup" 
@@ -4114,4 +4581,27 @@ AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
   height: 16px;
   cursor: pointer;
 }
+
+.profile-logo-band {
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  margin-top: -30px; /* AICI TRAGEM BANDA ÎN SUS spre text */
+  padding-bottom: 10px; /* Lăsăm totuși un mic spațiu jos */
+}
+
+.logo-medalion {
+  width: 55px;
+  height: 55px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: white;
+  border: 2px solid #e2e8f0;
+  padding: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  flex-shrink: 0;
+}
+
 </style>
