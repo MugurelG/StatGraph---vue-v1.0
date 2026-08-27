@@ -491,16 +491,31 @@ const addHrRow = () => {
 const removeHrRow = (index) => {
   hrRows.value.splice(index, 1);
 };
-// --- LOGICĂ COLOANE DINAMICE INSTITUȚII ---
+
+// --- ADAUGĂ ASTA ---
+const openRowDrawer = ref(null);
+const activeFinTableType = ref(null); // Va ține minte dacă adăugăm la 'inst' sau la 'dept'
+const newColName = ref('');
+const newColType = ref('valoare');
+const newColValue = ref(null);
+
+
+// --- LOGICĂ COLOANE FINANCIARE PENTRU INSTITUȚIE (Adaptată pentru noul Modal) ---
 const addFinColToRow = (rowIndex) => {
-  const name = prompt("Numele venitului (ex: Salariu de bază, Spor vechime):");
-  if (!name) return;
+  if (!newColName.value.trim()) return alert("Specifică un nume pentru venit!");
+  
   hrRows.value[rowIndex].finColumns.push({
-    id: 'fc_' + (++finColIdCounter),
-    name: name,
-    type: 'valoare', // Implicit: valoare
-    value: 0
+    id: 'inst_fc_' + (++finColIdCounter),
+    name: newColName.value,
+    type: newColType.value,
+    value: newColType.value === 'text' ? newColValue.value : (newColValue.value || 0)
   });
+  
+  // Resetăm Modal-ul și închidem după adăugare
+  newColName.value = '';
+  newColValue.value = null;
+  newColType.value = 'valoare';
+  openRowDrawer.value = null;
 };
 
 const removeFinColFromRow = (rowIndex, colId) => {
@@ -527,23 +542,29 @@ const addDepartmentHrRow = () => {
     ocupate: 0, 
     vacante: 0, 
     observatii: '',
-    finColumns: [] // <-- ADAUGAT: Aici se vor stoca coloanele dinamice ale acestui rând
+    finColumns: [] 
   });
 };
 const removeDepartmentHrRow = (index) => {
   departmentHrRows.value.splice(index, 1);
 };
 
-// --- LOGICĂ COLOANE DINAMICE DEPARTEMENTE ---
+// --- LOGICĂ COLOANE DINAMICE DEPARTAMENTE (Adaptată pentru noul Modal) ---
 const addFinColToDeptRow = (rowIndex) => {
-  const name = prompt("Numele venitului pentru departament:");
-  if (!name) return;
+  if (!newColName.value.trim()) return alert("Specifică un nume pentru venit!");
+  
   departmentHrRows.value[rowIndex].finColumns.push({
     id: 'dept_fc_' + (++finColIdCounter),
-    name: name,
-    type: 'valoare', 
-    value: 0
+    name: newColName.value,
+    type: newColType.value,
+    value: newColType.value === 'text' ? newColValue.value : (newColValue.value || 0)
   });
+  
+  // Resetăm Modal-ul și închidem după adăugare
+  newColName.value = '';
+  newColValue.value = null;
+  newColType.value = 'valoare';
+  openRowDrawer.value = null;
 };
 
 const removeFinColFromDeptRow = (rowIndex, colId) => {
@@ -659,16 +680,7 @@ const removeSporRow = (index) => {
 // --- LOGICĂ COLOANE FINANCIARE PENTRU ROL ---
 const roleFinColumns = ref([]); // Array-ul care va ține coloanele orizontale
 
-const addRoleFinCol = () => {
-  const name = prompt("Numele venitului (ex: Salariu Brut, Spor conducere, Tichete de masă):");
-  if (!name) return;
-  roleFinColumns.value.push({
-    id: 'role_fc_' + (++finColIdCounter),
-    name: name,
-    type: 'valoare', // Implicit: valoare
-    value: 0
-  });
-};
+// (VECHIUL addRoleFinCol CU PROMPT-UL A FOST ȘTERS, ACUM SE FOLOSEȘTE handleFinColAdd)
 
 const removeRoleFinCol = (colId) => {
   roleFinColumns.value = roleFinColumns.value.filter(c => c.id !== colId);
@@ -2210,88 +2222,106 @@ const handleDeleteAccount = async () => {
         <th style="width: 100px; background: #f0f9ff; color: #0284c7;">Total Rând</th>
       </tr>
     </thead>
-    <tbody>
-      <tr v-for="(row, index) in hrRows" :key="index">
-        <td>{{ index + 1 }}</td>
-        <td><input type="text" v-model="row.functie" placeholder="Nume post" :disabled="isSavingNode" /></td>
-        <td><input type="number" v-model.number="row.ocupate" min="0" :disabled="isSavingNode" /></td>
-        <td><input type="number" v-model.number="row.vacante" min="0" :disabled="isSavingNode" /></td>
-        <td><input type="number" :value="(row.ocupate || 0) + (row.vacante || 0)" disabled /></td>
-        <td><input type="text" v-model="row.statut" placeholder="Activ / Link concurs" :disabled="isSavingNode" /></td>
-        
-        <!-- RANDURI COLOANE DINAMICE -->
-        <td v-for="col in row.finColumns" :key="col.id" style="padding: 4px; background: #fafafa;">
-          <div style="display: flex; flex-direction: column; gap: 2px;">
-            <input type="text" v-model="col.name" placeholder="Nume venit" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
-            <select v-model="col.type" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode">
-              <option value="valoare">Valoare (Lei)</option>
-              <option value="procent">Procent (%)</option>
-              <option value="text">Text</option>
-            </select>
-            <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
-            <input v-else type="number" v-model.number="col.value" placeholder="0" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
-            <button @click="removeFinColFromRow(index, col.id)" style="font-size: 9px; color: red; cursor: pointer; align-self: flex-end;" :disabled="isSavingNode">Șterge coloană</button>
-          </div>
-        </td>
+                    <tbody>
+  <tr v-for="(row, index) in hrRows" :key="index">
+    <td class="td-center">{{ index + 1 }}</td>
+    <td><input type="text" v-model="row.functie" placeholder="Nume post" class="clean-input" :disabled="isSavingNode" /></td>
+    <td class="td-center"><input type="number" v-model.number="row.ocupate" min="0" class="clean-input input-sm" :disabled="isSavingNode" /></td>
+    <td class="td-center"><input type="number" v-model.number="row.vacante" min="0" class="clean-input input-sm" :disabled="isSavingNode" /></td>
+    <td class="td-center"><input type="number" :value="(row.ocupate || 0) + (row.vacante || 0)" disabled class="clean-input input-sm" /></td>
+    <td><input type="text" v-model="row.statut" placeholder="Activ / Link concurs" class="clean-input" :disabled="isSavingNode" /></td>
+    
+    <!-- UN SINGUR BUTON + VENIT (Deschide Modal-ul) -->
+    <td class="td-center td-action">
+      <button @click="openRowDrawer = index" class="btn-add-income" :disabled="isSavingNode">
+        + Venit
+      </button>
+    </td>
 
-        <!-- BUTON ȘTERGE RÂND -->
-        <td><button class="remove-row-btn" @click="removeHrRow(index)" :disabled="isSavingNode">✕</button></td>
+    <!-- COLOANELE DINAMICE (Redesign curat și larg) -->
+    <td v-for="col in row.finColumns" :key="col.id" class="td-dynamic-col">
+      <div class="dynamic-col-wrapper">
+        <!-- Numele coloanei -->
+        <input type="text" v-model="col.name" placeholder="Nume venit" class="clean-input col-name-input" :disabled="isSavingNode" />
         
-        <!-- BUTON ADAUGĂ VENIT -->
-        <td><button class="add-hr-btn" @click="addFinColToRow(index)" :disabled="isSavingNode" style="font-size: 10px; padding: 4px;">+ Venit</button></td>
+        <!-- Valoarea (spațiu mare) -->
+        <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." class="clean-input col-value-input" :disabled="isSavingNode" />
+        <input v-else type="number" v-model.number="col.value" placeholder="0" class="clean-input col-value-input" :disabled="isSavingNode" />
+        
+        <!-- Toolbar: Tip calcul + Buton Șterge -->
+        <div class="col-toolbar">
+          <select v-model="col.type" class="clean-select" :disabled="isSavingNode">
+            <option value="valoare">Valoare (Lei)</option>
+            <option value="procent">Procent (%)</option>
+            <option value="text">Text</option>
+          </select>
+          <button @click="removeFinColFromRow(index, col.id)" class="btn-delete-col" :disabled="isSavingNode" title="Șterge coloana">
+            ✕
+          </button>
+        </div>
+      </div>
+    </td> 
+    
+    <!-- BUTON ȘTERGE RÂND -->
+    <td class="td-center td-action">
+      <button class="remove-row-btn" @click="removeHrRow(index)" :disabled="isSavingNode">✕</button>
+    </td>
 
-        <!-- TOTAL CALCULAT LIVE -->
-        <td style="text-align: center; font-weight: bold; font-size: 12px; background: #f0f9ff; color: #0284c7;">
-          {{ calculateInstRowTotal(row) }} RON
-        </td>
+    <!-- TOTAL CALCULAT LIVE -->
+    <td class="td-total">
+      {{ calculateInstRowTotal(row) }} RON
+    </td>
+
+  </tr>
+
+  <!-- RÂNDUL GOL -->
+  <tr v-if="hrRows.length === 0">
+    <td :colspan="8 + masterInstFinColumns.length" style="text-align:center; color:#94a3b8; padding: 20px;">Nu au fost adăugate posturi</td>
+  </tr>
+</tbody>
+        <!-- AM ȘTERS ACEL </tbody> DESCHIS ÎN PLUS CARE ERA AICI -->
+
+        <!-- OPȚIONAL: Total General la baza tabelului -->
+        <tfoot v-if="hrRows.length > 0">
+          <tr>
+            <td :colspan="8 + masterInstFinColumns.length" style="text-align: right; font-weight: bold; padding: 10px;">TOTAL GENERAL INSTITUȚIE:</td>
+            <td style="text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; background: #fef2f2;">
+              {{ getInstNodeFinTotal() }} RON
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+</div>
+<!-- SECȚIUNEA 3: SURSE INFORMAȚII -->
+<div class="form-bottom-half">
+  <div class="hr-header">
+    <span>Surse Informații</span>
+    <button class="add-hr-btn" @click="addSourceRow" :disabled="isSavingNode">+ Adaugă Rand Info</button>
+  </div>
+  <table class="hr-table">
+    <thead>
+      <tr>
+        <th>Nr. Crt.</th>
+        <th>Subiect informație</th>
+        <th>Link sursă</th>
+        <th>Observații</th>
+        <th></th>
       </tr>
-      
-      <tr v-if="hrRows.length === 0">
-        <!-- Am actualizat colspan-ul să se extindă automat și peste noile coloane -->
-        <td :colspan="9 + masterInstFinColumns.length" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
+    </thead>
+    <tbody>
+      <tr v-for="(row, index) in sourceRows" :key="'src-'+index">
+        <td>{{ index + 1 }}</td>
+        <td><input type="text" v-model="row.subiect" placeholder="Nume subiect" :disabled="isSavingNode" /></td>
+        <td><input type="text" v-model="row.link" placeholder="https://..." :disabled="isSavingNode" /></td>
+        <td><input type="text" v-model="row.observatii" placeholder="Detalii suplimentare" :disabled="isSavingNode" /></td>
+        <td><button class="remove-row-btn" @click="removeSourceRow(index)" :disabled="isSavingNode">✕</button></td>
+      </tr>
+      <tr v-if="sourceRows.length === 0">
+        <td colspan="5" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate surse</td>
       </tr>
     </tbody>
-    <!-- OPȚIONAL: Total General la baza tabelului -->
-    <tfoot v-if="hrRows.length > 0">
-      <tr>
-        <td :colspan="8 + masterInstFinColumns.length" style="text-align: right; font-weight: bold; padding: 10px;">TOTAL GENERAL INSTITUȚIE:</td>
-        <td style="text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; background: #fef2f2;">
-          {{ getInstNodeFinTotal() }} RON
-        </td>
-      </tr>
-    </tfoot>
   </table>
 </div>
-        <!-- SECȚIUNEA 3: SURSE INFORMAȚII -->
-        <div class="form-bottom-half">
-          <div class="hr-header">
-            <span>Surse Informații</span>
-            <button class="add-hr-btn" @click="addSourceRow" :disabled="isSavingNode">+ Adaugă Rand Info</button>
-          </div>
-          <table class="hr-table">
-            <thead>
-              <tr>
-                <th>Nr. Crt.</th>
-                <th>Subiect informație</th>
-                <th>Link sursă</th>
-                <th>Observații</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, index) in sourceRows" :key="'src-'+index">
-                <td>{{ index + 1 }}</td>
-                <td><input type="text" v-model="row.subiect" placeholder="Nume subiect" :disabled="isSavingNode" /></td>
-                <td><input type="text" v-model="row.link" placeholder="https://..." :disabled="isSavingNode" /></td>
-                <td><input type="text" v-model="row.observatii" placeholder="Detalii suplimentare" :disabled="isSavingNode" /></td>
-                <td><button class="remove-row-btn" @click="removeSourceRow(index)" :disabled="isSavingNode">✕</button></td>
-              </tr>
-              <tr v-if="sourceRows.length === 0">
-                <td colspan="5" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate surse</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </template>
 
       <!-- ==================== FORMULAR PENTRU DEPARTAMENT ==================== -->
@@ -2315,71 +2345,75 @@ const handleDeleteAccount = async () => {
           </div>
         </div>
 
-        <!-- SECȚIUNEA: STRUCTURĂ RESURSE UMANE -->
-        <div class="form-bottom-half">
-          <div class="hr-header">
-            <span>Structură Resurse Umane</span>
-            <button class="add-hr-btn" @click="addDepartmentHrRow" :disabled="isSavingNode">+ Adaugă Rând</button>
-          </div>
                  <table class="hr-table">
             <thead>
               <tr>
-                <th style="width: 60px;">Nr. Crt.</th>
+                <th style="width: 60px;" class="td-center">Nr. Crt.</th>
                 <th>Denumire post</th>
-                <th style="width: 100px;">Total posturi</th>
-                <th style="width: 100px;">Ocupate</th>
-                <th style="width: 100px;">Vacante</th>
+                <th style="width: 100px;" class="td-center">Total posturi</th>
+                <th style="width: 100px;" class="td-center">Ocupate</th>
+                <th style="width: 100px;" class="td-center">Vacante</th>
                 <th>Observații</th>
-                <!-- COLOANE DINAMICE GENERATE AUTOMAT -->
-                <th v-for="col in masterDeptFinColumns" :key="col.id" style="min-width: 140px; font-size: 11px;">{{ col.name }}</th>
+                <!-- COLOANE DINAMICE - Am schimbat style cu clasa noua pentru latime -->
+                <th v-for="col in masterDeptFinColumns" :key="col.id" class="td-dynamic-col" style="font-size: 11px; text-align: center;">{{ col.name }}</th>
                 <!-- BUTOANE FINAL -->
-                <th style="width: 50px;"></th>
-                <th style="width: 100px;"></th>
-                <th style="width: 100px; background: #f0fdf4; color: #16a34a;">Total Rând</th>
+                <th style="width: 100px;" class="td-center"></th>
+                <th style="width: 50px;" class="td-center"></th>
+                <th style="width: 130px; background: #f0fdf4; color: #16a34a;" class="td-center">Total Rând</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(row, index) in departmentHrRows" :key="'dep-hr-'+index">
-                <td style="text-align: center;">{{ index + 1 }}</td>
-                <td><input type="text" v-model="row.functie" placeholder="Nume post" :disabled="isSavingNode" /></td>
-                <td><input type="number" v-model.number="row.total" min="0" :disabled="isSavingNode" /></td>
-                <td><input type="number" v-model.number="row.ocupate" min="0" :disabled="isSavingNode" /></td>
-                <td><input type="number" v-model.number="row.vacante" min="0" :disabled="isSavingNode" /></td>
-                <td><input type="text" v-model="row.observatii" placeholder="Detalii" :disabled="isSavingNode" /></td>
+                <td class="td-center">{{ index + 1 }}</td>
+                <td><input type="text" v-model="row.functie" placeholder="Nume post" class="clean-input" :disabled="isSavingNode" /></td>
+                <td class="td-center"><input type="number" v-model.number="row.total" min="0" class="clean-input input-sm" :disabled="isSavingNode" /></td>
+                <td class="td-center"><input type="number" v-model.number="row.ocupate" min="0" class="clean-input input-sm" :disabled="isSavingNode" /></td>
+                <td class="td-center"><input type="number" v-model.number="row.vacante" min="0" class="clean-input input-sm" :disabled="isSavingNode" /></td>
+                <td><input type="text" v-model="row.observatii" placeholder="Detalii" class="clean-input" :disabled="isSavingNode" /></td>
                 
-                <!-- RANDURI COLOANE DINAMICE -->
-                <td v-for="col in row.finColumns" :key="col.id" style="padding: 4px; background: #f9fafb;">
-                  <div style="display: flex; flex-direction: column; gap: 2px;">
-                    <input type="text" v-model="col.name" placeholder="Nume venit" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
-                    <select v-model="col.type" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode">
-                      <option value="valoare">Valoare (Lei)</option>
-                      <option value="procent">Procent (%)</option>
-                      <option value="text">Text</option>
-                    </select>
-                    <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
-                    <input v-else type="number" v-model.number="col.value" placeholder="0" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode" />
-                    <button @click="removeFinColFromDeptRow(index, col.id)" style="font-size: 9px; color: red; cursor: pointer; align-self: flex-end;" :disabled="isSavingNode">Șterge coloană</button>
+                <!-- COLOANELE DINAMICE (Redesign curat) -->
+                <td v-for="col in row.finColumns" :key="col.id" class="td-dynamic-col">
+                  <div class="dynamic-col-wrapper">
+                    <input type="text" v-model="col.name" placeholder="Nume venit" class="clean-input col-name-input" :disabled="isSavingNode" />
+                    <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." class="clean-input col-value-input" :disabled="isSavingNode" />
+                    <input v-else type="number" v-model.number="col.value" placeholder="0" class="clean-input col-value-input" :disabled="isSavingNode" />
+                    <div class="col-toolbar">
+                      <select v-model="col.type" class="clean-select" :disabled="isSavingNode">
+                        <option value="valoare">Valoare (Lei)</option>
+                        <option value="procent">Procent (%)</option>
+                        <option value="text">Text</option>
+                      </select>
+                      <button @click="removeFinColFromDeptRow(index, col.id)" class="btn-delete-col" :disabled="isSavingNode" title="Șterge coloana">
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 </td>
 
-                <!-- BUTON ȘTERGE RÂND -->
-                <td><button class="remove-row-btn" @click="removeDepartmentHrRow(index)" :disabled="isSavingNode">✕</button></td>
-                
-                <!-- BUTON ADAUGĂ VENIT -->
-                <td><button class="add-hr-btn" @click="addFinColToDeptRow(index)" :disabled="isSavingNode" style="font-size: 10px; padding: 4px;">+ Venit</button></td>
+                <!-- BUTON ADAUGĂ VENIT (Deschide Modal-ul) -->
+                <td class="td-center td-action">
+                  <button @click="activeFinTableType = 'dept'; openRowDrawer = index" class="btn-add-income" :disabled="isSavingNode">
+                    + Venit
+                  </button>
+                </td>
 
+                <!-- BUTON ȘTERGE RÂND -->
+                <td class="td-center td-action">
+                  <button class="remove-row-btn" @click="removeDepartmentHrRow(index)" :disabled="isSavingNode">✕</button>
+                </td>
+                
                 <!-- TOTAL CALCULAT LIVE -->
-                <td style="text-align: center; font-weight: bold; font-size: 12px; background: #f0fdf4; color: #16a34a;">
+                <td class="td-total" style="background: #f0fdf4 !important; color: #16a34a !important;">
                   {{ calculateDeptRowTotal(row) }} RON
                 </td>
               </tr>
               
               <tr v-if="departmentHrRows.length === 0">
-                <!-- Am actualizat colspan-ul să se extindă automat și peste noile coloane -->
                 <td :colspan="9 + masterDeptFinColumns.length" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
               </tr>
             </tbody>
-            <!-- TOTAL GENERAL DEPARTAMENT -->
+            
+          <!-- TOTAL GENERAL DEPARTAMENT -->
             <tfoot v-if="departmentHrRows.length > 0">
               <tr>
                 <td :colspan="8 + masterDeptFinColumns.length" style="text-align: right; font-weight: bold; padding: 10px;">TOTAL GENERAL DEPARTAMENT:</td>
@@ -2388,13 +2422,11 @@ const handleDeleteAccount = async () => {
                 </td>
               </tr>
             </tfoot>
-          </table> 
-        </div>
-      </template>
+          </table>
+          </template> <!-- <--- ASTA ESTE LINIA CARE LIPSEA! Trebuie să închizi template-ul de Departament -->
 
 
-
-      <!-- ==================== FORMULAR PENTRU ROL ==================== -->
+            <!-- ==================== FORMULAR PENTRU ROL ==================== -->
       <template v-else>
         <!-- SECȚIUNEA 1: IDENTITATE ROL (3 coloane) -->
         <div class="form-top-half">
@@ -2422,62 +2454,76 @@ const handleDeleteAccount = async () => {
           </div>
         </div>
 
-        <!-- SECȚIUNEA: GRADAȚIE / TREAPTĂ -->
+        <!-- SECȚIUNEA 1.1: GRADAȚIE / TREAPTĂ -->
         <div class="relation-admin-section">
           <label>Gradație / Treaptă</label>
           <input type="text" v-model="adminFormData.role_gradatie_treapta" placeholder="ex: Gradația 3, Treapta I" :disabled="isSavingNode" />
         </div>
 
-        <!-- SECȚIUNEA 2: VENITURI ROL (COLOANE DINAMICE) -->
+        <!-- SECȚIUNEA 2: VENITURI ROL (Design Nou) -->
         <div class="form-bottom-half">
           <div class="hr-header">
-            <span>Venituri Rol</span>
-            <button class="add-hr-btn" @click="addRoleFinCol" :disabled="isSavingNode">+ Adaugă Venit</button>
+            <span>Venituri Funcție</span>
+            <button @click="activeFinTableType = 'role'; openRowDrawer = 0" class="btn-add-income" :disabled="isSavingNode" style="border-color: #facc15; color: #ca8a04; background: #fefce8;">
+              + Adaugă Venit
+            </button>
           </div>
           
-          <table class="hr-table" v-if="roleFinColumns.length > 0">
-            <thead>
-              <tr>
-                <th v-for="col in roleFinColumns" :key="col.id" style="min-width: 160px; font-size: 11px; background: #fef3c7; color: #92400e;">
-                  {{ col.name }}
-                </th>
-                <th style="width: 50px; background: #fef3c7;"></th>
-              </tr>
-            </thead>
+          <table class="hr-table">
             <tbody>
-              <tr>
-                <!-- Pentru fiecare coloană creată, afișăm setările și inputul -->
-                <td v-for="col in roleFinColumns" :key="col.id" style="padding: 4px; background: #fffbeb; vertical-align: top;">
-                  <div style="display: flex; flex-direction: column; gap: 2px;">
-                    <select v-model="col.type" style="font-size: 10px; padding: 2px; width: 100%;" :disabled="isSavingNode">
-                      <option value="valoare">Valoare (Lei)</option>
-                      <option value="procent">Procent (%)</option>
-                      <option value="text">Text</option>
-                    </select>
-                    <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." style="font-size: 12px; padding: 4px; width: 100%;" :disabled="isSavingNode" />
-                    <input v-else type="number" v-model.number="col.value" placeholder="0" style="font-size: 12px; padding: 4px; width: 100%;" :disabled="isSavingNode" />
-                    <button @click="removeRoleFinCol(col.id)" style="font-size: 9px; color: red; cursor: pointer; align-self: flex-end;" :disabled="isSavingNode">Șterge</button>
+              <!-- Rândul principal cu veniturile -->
+              <tr v-if="roleFinColumns.length > 0">
+                
+                <!-- COLOANELE DINAMICE -->
+                <td v-for="col in roleFinColumns" :key="col.id" class="td-dynamic-col">
+                  <div class="dynamic-col-wrapper">
+                    <!-- Numele venitului -->
+                    <input type="text" v-model="col.name" placeholder="Nume venit" class="clean-input col-name-input" :disabled="isSavingNode" />
+                    
+                    <!-- Valoarea -->
+                    <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." class="clean-input col-value-input" :disabled="isSavingNode" />
+                    <input v-else type="number" v-model.number="col.value" placeholder="0" class="clean-input col-value-input" :disabled="isSavingNode" />
+                    
+                    <!-- Toolbar (Select + Buton Sterge) -->
+                    <div class="col-toolbar">
+                      <select v-model="col.type" class="clean-select" :disabled="isSavingNode">
+                        <option value="valoare">Valoare (Lei)</option>
+                        <option value="procent">Procent (%)</option>
+                        <option value="text">Text</option>
+                      </select>
+                      <button @click="removeRoleFinCol(col.id)" class="btn-delete-col" :disabled="isSavingNode" title="Șterge coloana">
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 </td>
-                <td></td> <!-- Căsuță goală pentru aliniere -->
+
+                <!-- TOTAL CALCULAT LIVE -->
+                <td class="td-total" style="background: #fefce8 !important; color: #ca8a04 !important; min-width: 140px;">
+                  {{ getRoleTotal() }} RON
+                </td>
+              </tr>
+
+              <!-- Mesajul dacă nu sunt venituri -->
+              <tr v-else>
+                <td style="text-align:center; color:#94a3b8; padding: 20px; border: 1px dashed #e2e8f0; border-radius: 8px;">
+                  Nu au fost adăugate venituri pentru acest rol.
+                </td>
               </tr>
             </tbody>
-            <tfoot>
+            
+            <!-- TOTAL GENERAL ROL -->
+            <tfoot v-if="roleFinColumns.length > 0">
               <tr>
-                <td :colspan="roleFinColumns.length" style="text-align: right; font-weight: bold; padding: 10px; border-top: 2px solid #f59e0b;">TOTAL VENITURI ROL:</td>
-                <td style="text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; background: #fef2f2; border-top: 2px solid #f59e0b;">
+                <td :colspan="roleFinColumns.length" style="text-align: right; font-weight: bold; padding: 10px;">TOTAL ROL:</td>
+                <td style="text-align: center; font-weight: bold; font-size: 14px; color: #dc2626; background: #fef2f2;">
                   {{ getRoleTotal() }} RON
                 </td>
               </tr>
             </tfoot>
           </table>
-          
-          <!-- Mesaj alternativ dacă nu sunt coloane -->
-          <div v-else style="text-align:center; color:#94a3b8; padding: 20px; border: 1px dashed #cbd5e1; border-radius: 8px;">
-            Nu au fost adăugate venituri. Apasă pe "+ Adaugă Venit".
-          </div>
         </div>
-        
+           
       </template>
 
       <!-- MESAJ ȘI BUTOANE (Comune pentru ambele formulare) -->
@@ -2665,7 +2711,7 @@ const handleDeleteAccount = async () => {
 
             <!-- TOTAL GENERAL INSTITUȚIE -->
             <div style="margin-top: 15px; text-align: right; font-size: 1.1rem; font-weight: bold; color: #dc2626; background: #fef2f2; padding: 10px; border-radius: 6px;">
-              TOTAL VENITURI INSTITUȚIE: {{ getProfileFinTotal() }} RON
+              TOTAL CHELUIELI CU VENITURILE/INSTITUȚIE: {{ getProfileFinTotal() }} RON
             </div>
           </div>
 
@@ -2940,6 +2986,54 @@ const handleDeleteAccount = async () => {
       </div>
     </transition>
   </div>
+
+<!-- MODAL POP-UP PENTRU ADAUGARE VENIT -->
+<div v-if="openRowDrawer !== null" class="modal-overlay" @click.self="openRowDrawer = null">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Adaugă Coloană Venit</h3>
+      <button class="modal-close-btn" @click="openRowDrawer = null">✕</button>
+    </div>
+    
+    <div class="modal-body">
+      <label class="modal-label">Denumirea venitului</label>
+      <input type="text" v-model="newColName" placeholder="ex: Salariu de bază, Spor toxicitate..." class="clean-input modal-input" autofocus />
+
+      <label class="modal-label" style="margin-top: 20px;">Tip de calcul</label>
+      <div class="modal-type-group">
+        <button 
+          @click="newColType = 'valoare'" 
+          :class="['modal-type-btn', { active: newColType === 'valoare' }]">
+          💰 Valoare (Lei)
+        </button>
+        <button 
+          @click="newColType = 'procent'" 
+          :class="['modal-type-btn', { active: newColType === 'procent' }]">
+          📊 Procent (%)
+        </button>
+        <button 
+          @click="newColType = 'text'" 
+          :class="['modal-type-btn', { active: newColType === 'text' }]">
+          📝 Text (Info)
+        </button>
+      </div>
+
+      <div v-if="newColType !== 'text'" style="margin-top: 20px;">
+        <label class="modal-label">Valoare implicită (opțional)</label>
+        <input type="number" v-model.number="newColValue" placeholder="0" class="clean-input modal-input" />
+      </div>
+      <div v-else style="margin-top: 20px;">
+        <label class="modal-label">Text informativ (opțional)</label>
+        <textarea v-model="newColValue" placeholder="Scrie detaliile aici..." class="clean-input modal-input" rows="3"></textarea>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-cancel-modal" @click="openRowDrawer = null">Anulează</button>
+      <button class="btn-confirm-modal" @click="handleFinColAdd">Adaugă în tabel</button>
+      </div>
+  </div>
+</div>  
 </template>
 
 
@@ -4604,4 +4698,356 @@ AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
   flex-shrink: 0;
 }
 
+/* --- ESTETICA NOUĂ PENTRU FORMULAR --- */
+
+/* Resetare generală inputuri */
+.clean-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: white;
+  box-sizing: border-box;
+}
+.clean-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.clean-input:disabled {
+  background: #f8fafc;
+  color: #64748b;
+}
+.input-sm { max-width: 60px; text-align: center; }
+
+/* Styling pentru Select */
+.clean-select {
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 11px;
+  background: white;
+  cursor: pointer;
+  flex: 1;
+}
+.clean-select:focus { outline: 1px solid #3b82f6; }
+
+/* Stilizare celule tabel */
+.td-center { text-align: center; vertical-align: middle; }
+.td-action { width: 90px; }
+.td-total { 
+  width: 120px; 
+  font-weight: bold; 
+  font-size: 13px; 
+  background: #f0f9ff; 
+  color: #0284c7; 
+  text-align: center;
+}
+
+/* Buton + Venit principal */
+.btn-add-income {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px dashed #93c5fd;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-add-income:hover {
+  background: #dbeafe;
+  border-color: #3b82f6;
+}
+
+/* Coltul dinamic (Redesign) */
+.td-dynamic-col {
+  background: #fafafa;
+  padding: 8px !important;
+  min-width: 220px; /* Lărgit considerabil */
+  vertical-align: top;
+}
+.dynamic-col-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* Spațiu aerisit între elemente */
+}
+.col-name-input {
+  font-size: 11px !important;
+  font-weight: 600;
+  color: #334155;
+  background: #f1f5f9 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.col-value-input {
+  font-size: 14px !important; /* Valoarea mare și clară */
+  font-weight: 500;
+  padding: 10px !important;
+}
+.col-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 6px;
+}
+.btn-delete-col {
+  background: #fef2f2;
+  color: #ef4444;
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
+}
+.btn-delete-col:hover { background: #fee2e2; }
+.remove-row-btn {
+  background: #f1f5f9;
+  color: #ef4444;
+  border: 1px solid #e2e8f0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+
+/* --- ESTETICA NOUĂ PENTRU FORMULAR (BULLETPROOF) --- */
+
+/* Forțăm inputurile din tabel să arate nou */
+.hr-table .clean-input {
+  width: 100% !important;
+  padding: 8px 10px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  transition: border-color 0.2s, box-shadow 0.2s !important;
+  background: white !important;
+  box-sizing: border-box !important;
+  height: auto !important;
+  line-height: normal !important;
+}
+.hr-table .clean-input:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+.hr-table .clean-input:disabled {
+  background: #f8fafc !important;
+  color: #64748b !important;
+}
+.hr-table .input-sm { max-width: 70px !important; text-align: center !important; }
+
+/* Forțăm Select-ul */
+.hr-table .clean-select {
+  padding: 6px 8px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  background: white !important;
+  cursor: pointer !important;
+  flex: 1 !important;
+  height: auto !important;
+  width: 100% !important;
+}
+.hr-table .clean-select:focus { outline: 1px solid #3b82f6 !important; }
+
+/* Stilizare celule tabel */
+.hr-table .td-center { text-align: center !important; vertical-align: middle !important; }
+.hr-table .td-action { width: 100px !important; }
+.hr-table .td-total { 
+  width: 130px !important; 
+  font-weight: bold !important; 
+  font-size: 13px !important; 
+  background: #f0f9ff !important; 
+  color: #0284c7 !important; 
+  text-align: center !important;
+  padding: 10px !important;
+}
+
+/* Buton + Venit principal */
+.hr-table .btn-add-income {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  border: 1px dashed #93c5fd !important;
+  padding: 8px 14px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
+  display: inline-block !important;
+}
+.hr-table .btn-add-income:hover {
+  background: #dbeafe !important;
+  border-color: #3b82f6 !important;
+}
+
+/* Coltul dinamic (Redesign) */
+.hr-table .td-dynamic-col {
+  background: #fafafa !important;
+  padding: 10px !important;
+  min-width: 220px !important; /* Lărgit considerabil */
+  vertical-align: top !important;
+}
+.hr-table .dynamic-col-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important; /* Spațiu aerisit între elemente */
+}
+.hr-table .col-name-input {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #334155 !important;
+  background: #f1f5f9 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+.hr-table .col-value-input {
+  font-size: 14px !important; /* Valoarea mare și clară */
+  font-weight: 500 !important;
+  padding: 10px !important;
+}
+.hr-table .col-toolbar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  border-top: 1px solid #e2e8f0 !important;
+  padding-top: 8px !important;
+  margin-top: 4px !important;
+}
+.hr-table .btn-delete-col {
+  background: #fef2f2 !important;
+  color: #ef4444 !important;
+  border: none !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: 0.2s !important;
+  flex-shrink: 0 !important;
+}
+.hr-table .btn-delete-col:hover { background: #fee2e2 !important; }
+
+.hr-table .remove-row-btn {
+  background: #f1f5f9 !important;
+  color: #ef4444 !important;
+  border: 1px solid #e2e8f0 !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 6px !important;
+  font-size: 16px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+
+/* --- ESTETICA MODAL POP-UP (BULLETPROOF) --- */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important; /* Prioritate maximă să fie peste tot */
+}
+.modal-content {
+  background: white !important;
+  border-radius: 16px !important;
+  width: 90% !important;
+  max-width: 500px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+  animation: modalFadeIn 0.2s ease-out !important;
+}
+@keyframes modalFadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+.modal-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 24px 24px 0 !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  padding-bottom: 16px !important;
+}
+.modal-header h3 { margin: 0 !important; font-size: 18px !important; color: #0f172a !important; font-weight: 700 !important; }
+.modal-close-btn {
+  background: none !important; border: none !important; font-size: 24px !important; color: #94a3b8 !important; cursor: pointer !important;
+}
+.modal-close-btn:hover { color: #ef4444 !important; }
+
+.modal-body { padding: 24px !important; }
+.modal-label { display: block !important; font-size: 13px !important; font-weight: 600 !important; color: #475569 !important; margin-bottom: 8px !important; }
+.modal-input { font-size: 15px !important; padding: 12px !important; }
+
+.modal-type-group {
+  display: flex !important;
+  gap: 10px !important;
+}
+.modal-type-btn {
+  flex: 1 !important;
+  padding: 14px 10px !important;
+  border: 2px solid #e2e8f0 !important;
+  border-radius: 10px !important;
+  background: white !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #64748b !important;
+  cursor: pointer !important;
+  transition: 0.2s !important;
+  text-align: center !important;
+}
+.modal-type-btn:hover { border-color: #93c5fd !important; color: #3b82f6 !important; }
+.modal-type-btn.active {
+  border-color: #3b82f6 !important;
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+}
+
+.modal-footer {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  padding: 0 24px 24px !important;
+}
+.btn-cancel-modal {
+  padding: 12px 20px !important;
+  border-radius: 8px !important;
+  border: 1px solid #e2e8f0 !important;
+  background: white !important;
+  color: #475569 !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  font-size: 14px !important;
+}
+.btn-confirm-modal {
+  padding: 12px 24px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  background: #3b82f6 !important;
+  color: white !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important;
+  font-size: 14px !important;
+}
+.btn-confirm-modal:hover { background: #2563eb !important; }
 </style>
