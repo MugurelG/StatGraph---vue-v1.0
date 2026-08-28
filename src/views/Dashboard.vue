@@ -492,26 +492,35 @@ const removeHrRow = (index) => {
   hrRows.value.splice(index, 1);
 };
 
-// --- ADAUGĂ ASTA ---
+// --- VARIABILE PENTRU MODAL VENITURI ---
 const openRowDrawer = ref(null);
-const activeFinTableType = ref(null); // Va ține minte dacă adăugăm la 'inst' sau la 'dept'
+const activeFinTableType = ref(null); // 'inst', 'dept', sau 'role'
 const newColName = ref('');
 const newColType = ref('valoare');
 const newColValue = ref(null);
 
 
-// --- LOGICĂ COLOANE FINANCIARE PENTRU INSTITUȚIE (Adaptată pentru noul Modal) ---
-const addFinColToRow = (rowIndex) => {
+// --- SUPER FUNCȚIA PENTRU ADAUGARE (Asta o cheamă butonul din Modal) ---
+const handleFinColAdd = () => {
   if (!newColName.value.trim()) return alert("Specifică un nume pentru venit!");
   
-  hrRows.value[rowIndex].finColumns.push({
-    id: 'inst_fc_' + (++finColIdCounter),
+  const newCol = {
+    id: 'fin_' + (++finColIdCounter),
     name: newColName.value,
     type: newColType.value,
     value: newColType.value === 'text' ? newColValue.value : (newColValue.value || 0)
-  });
-  
-  // Resetăm Modal-ul și închidem după adăugare
+  };
+
+  // Aici decide unde să pună coloana
+  if (activeFinTableType.value === 'inst') {
+    hrRows.value[openRowDrawer.value].finColumns.push(newCol);
+  } else if (activeFinTableType.value === 'dept') {
+    departmentHrRows.value[openRowDrawer.value].finColumns.push(newCol);
+  } else if (activeFinTableType.value === 'role') {
+    roleFinColumns.value.push(newCol);
+  }
+
+  // Resetăm Modal-ul și închidem
   newColName.value = '';
   newColValue.value = null;
   newColType.value = 'valoare';
@@ -549,23 +558,8 @@ const removeDepartmentHrRow = (index) => {
   departmentHrRows.value.splice(index, 1);
 };
 
-// --- LOGICĂ COLOANE DINAMICE DEPARTAMENTE (Adaptată pentru noul Modal) ---
-const addFinColToDeptRow = (rowIndex) => {
-  if (!newColName.value.trim()) return alert("Specifică un nume pentru venit!");
-  
-  departmentHrRows.value[rowIndex].finColumns.push({
-    id: 'dept_fc_' + (++finColIdCounter),
-    name: newColName.value,
-    type: newColType.value,
-    value: newColType.value === 'text' ? newColValue.value : (newColValue.value || 0)
-  });
-  
-  // Resetăm Modal-ul și închidem după adăugare
-  newColName.value = '';
-  newColValue.value = null;
-  newColType.value = 'valoare';
-  openRowDrawer.value = null;
-};
+// --- LOGICĂ COLOANE DINAMICE DEPARTAMENTE ---
+// (Funcția veche addFinColToDeptRow a fost ștearsă, acum folosește handleFinColAdd)
 
 const removeFinColFromDeptRow = (rowIndex, colId) => {
   departmentHrRows.value[rowIndex].finColumns = departmentHrRows.value[rowIndex].finColumns.filter(c => c.id !== colId);
@@ -676,7 +670,6 @@ const addSporRow = () => {
 const removeSporRow = (index) => {
   roleSporuriRows.value.splice(index, 1);
 };
-
 // --- LOGICĂ COLOANE FINANCIARE PENTRU ROL ---
 const roleFinColumns = ref([]); // Array-ul care va ține coloanele orizontale
 
@@ -2233,7 +2226,7 @@ const handleDeleteAccount = async () => {
     
     <!-- UN SINGUR BUTON + VENIT (Deschide Modal-ul) -->
     <td class="td-center td-action">
-      <button @click="openRowDrawer = index" class="btn-add-income" :disabled="isSavingNode">
+      <button @click="activeFinTableType = 'inst'; openRowDrawer = index" class="btn-add-income" :disabled="isSavingNode">
         + Venit
       </button>
     </td>
@@ -2345,6 +2338,12 @@ const handleDeleteAccount = async () => {
           </div>
         </div>
 
+  <div class="form-bottom-half">
+        <div class="hr-header">
+          <span>Structură Resurse Umane</span>
+          <button class="add-hr-btn" @click="addDepartmentHrRow" :disabled="isSavingNode">+ Adaugă Rând</button>
+        </div>
+
                  <table class="hr-table">
             <thead>
               <tr>
@@ -2423,6 +2422,7 @@ const handleDeleteAccount = async () => {
               </tr>
             </tfoot>
           </table>
+          </div>
           </template> <!-- <--- ASTA ESTE LINIA CARE LIPSEA! Trebuie să închizi template-ul de Departament -->
 
 
