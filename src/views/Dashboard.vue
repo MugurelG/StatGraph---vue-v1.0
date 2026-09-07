@@ -8,6 +8,7 @@ import SunburstChart from '../components/SunburstChart.vue';
 import TreemapChart from '../components/TreemapChart.vue';
 import AuthModal from '../components/auth/AuthModal.vue';
 import html2pdf from 'html2pdf.js';
+import DynamicFinTable from '../components/DynamicFinTable.vue';
 import { Home, Landmark, MapPin, Building, LogOut, Trash2, User, Pencil, Plus, Edit3, Move, Search, BookOpen } from 'lucide-vue-next';
 // ADAUGAT: Inițializăm Router-ul și funcțiile de Autentificare
 const router = useRouter();
@@ -21,6 +22,20 @@ onConnect((params) => addEdges(params));
 const columnCount = ref(3);
 const elements = ref([]);
 const allNodesList = ref([]);
+
+// NOU: Dicționar pentru copți (Crește viteza de la O(N^2) la O(N))
+const childrenMap = computed(() => {
+  const map = new Map();
+  allNodesList.value.forEach(node => {
+    if (node.parent_id) {
+      const pId = String(node.parent_id).trim();
+      if (!map.has(pId)) map.set(pId, []);
+      map.get(pId).push(node);
+    }
+  });
+  return map;
+});
+
 const currentRootId = ref(null); // Setat default null, se va popula din DB
 const activePanel = ref(null);
 const localStep = ref(0);
@@ -143,11 +158,27 @@ const executeSearch = async () => {
   searchResultNodes.value = normalizedNodes;
 };
 
-const filteredInstitutions = computed(() => {
-  if (!searchTerm.value || searchTerm.value.length < 2) return [];
-  const term = removeDiacritics(searchTerm.value);
-  return allInstitutions.value.filter(inst => removeDiacritics(inst.nume).includes(term));
+// NOU: Căutare optimizată cu Debounce (Așteaptă 300ms să oprească tastarea)
+const filteredInstitutions = ref([]);
+let searchTimeout = null;
+
+watch(searchTerm, (newTerm) => {
+  clearTimeout(searchTimeout);
+  
+  if (!newTerm || newTerm.length < 2) {
+    filteredInstitutions.value = [];
+    return;
+  }
+  
+  // Așteptăm 300ms după ce userul a terminat de tastat
+  searchTimeout = setTimeout(() => {
+    const term = removeDiacritics(newTerm);
+    // Folosim câmpul 'nume_curat' pregătit anterior (Mult mai rapid!)
+    filteredInstitutions.value = allInstitutions.value.filter(inst => inst.nume_curat.includes(term));
+  }, 300);
 });
+
+
 const searchInputRef = ref(null);
 
 const toggleSearch = () => {
@@ -192,6 +223,8 @@ const showRolePanel = ref(false);
 const showDepartmentPanel = ref(false);
 const selectedDepartmentData = ref(null);
 const departmentProfileHrData = ref([]);
+const showCommitteePanel = ref(false);
+const selectedCommitteeData = ref(null);
 
 const selectedRoleData = ref(null);
 const selectedUserData = ref(null);
@@ -221,51 +254,188 @@ const openUserDetails = async (node) => {
             userSourceData.value = [];
           }
 
-          // Aducem datele HR pentru acest nod
-          const { data, error } = await supabase
+                             // 1. Extragem ID-urile tuturor copiilor (departamente + roluri) direct din lista încărcată în graf
+          const childNodeIds = allNodesList.value
+            .filter(n => String(n.institutie_id) === String(node.id))
+            .map(n => String(n.id));
+
+          // 2. Facem un singur array cu ID-ul instituției + ID-urile copiilor
+          const allRelevantNodeIds = [String(node.id), ...childNodeIds];
+
+                   let combinedHrData = [];
+
+          // 1. Funcție de cautare recursivă rapidă folosind dicționarul
+          const getDescendantIds = (parentId) => {
+            let ids = [];
+            const stack = [String(parentId)]; // Folosim o stivă pentru a evita limitările de recursivitate
+            
+            while (stack.length > 0) {
+              const currentId = stack.pop();
+              const directChildren = childrenMap.value.get(currentId) || [];
+              
+              directChildren.forEach(child => {
+                const childId = String(child.id);
+                ids.push(childId);
+                stack.push(childId); // Adăugăm copilul în stivă pentru a-i căuta și lui copiii
+              });
+            }
+            return ids;
+          };
+
+                             // Obținem ID-urile tuturor copiilor instituției
+          const allDescendantIds = getDescendantIds(String(node.id));
+          const allIdsToQuery = [String(node.id), ...allDescendantIds];
+
+                   // Pregătim ID-urile și NUMELE departamentelor și birourilor pentru a le filtra
+          const childDepartments = allNodesList.value.filter(n => 
+            allDescendantIds.includes(String(n.id)) && (n.is_department === true || n.is_office === true)
+          );
+          const departmentIds = childDepartments.map(n => String(n.id));
+
+          // DEFINIM CORECT ROLURILE (folosim !n.is_... pentru a prinde și null-urile din DB)
+          const childRoles = allNodesList.value.filter(n => 
+            allDescendantIds.includes(String(n.id)) && 
+            !n.is_institution && 
+            !n.is_department && 
+            !n.is_office && 
+            !n.is_committee
+          );
+
+          // Siguranță: Supabase dă eroare 400 dacă trimitem un ID care nu e UUID valid
+          const isUUID = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+          const safeIdsToQuery = allIdsToQuery.filter(id => isUUID(id));
+
+          // 2. Aducem datele HR din tabelul date_joburi (FILTRÂND DEPARTEMENTELE)
+          const { data: tableData, error: tableError } = await supabase
             .from('date_joburi')
             .select('*')
-            .eq('organogram_node_id', String(node.id));
+            .in('organogram_node_id', safeIdsToQuery);
           
-           if (!error && data) {
-            userHrData.value = data.map(row => ({
-              functie: row.functie || '',
-              ocupate: row.pozitii_ocupate || 0,
-              vacante: row.pozitii_vacante || 0,
-              total: (row.pozitii_ocupate || 0) + (row.pozitii_vacante || 0),
-              statut: row.statut || 'Activ',
-              finColumns: row.fin_columns || [] // PRELUARE COLOANE FINANCIARE PT PROFIL
-            }));
-          } else {
-            userHrData.value = [];
+                   // 2. Aducem datele HR din tabelul date_joburi (FILTRÂND DEPARTEMENTELE)
+          // [Codul existent cu safeIdsToQuery rămâne la fel, dar modificăm maparea de mai jos:]
+
+          if (!tableError && tableData) {
+            const instName = selectedUserData.value?.nume || 'Instituție';
+            if (tableData.length > 0) {
+              // HEADER Instituție
+              combinedHrData.push({ isHeader: true, title: instName });
+              combinedHrData.push(...tableData
+                .filter(row => !departmentIds.includes(String(row.organogram_node_id))) 
+                .map(row => ({
+                  functie: row.functie || '',
+                  ocupate: row.pozitii_ocupate || 0,
+                  vacante: row.pozitii_vacante || 0,
+                  total: (row.pozitii_ocupate || 0) + (row.pozitii_vacante || 0),
+                  statut: row.statut || 'Activ',
+                  finColumns: row.fin_columns || [] 
+                }))
+              );
+            }
           }
+          // 3. Aducem datele HR din METADATA pentru DEPARTEMENTE
+          // Funcție ajutătoare: Găsește numele instituției părinte (dacă nodul nu e direct sub rădăcină)
+          const getParentInstitutionName = (startNodeId, rootId) => {
+            let currentId = startNodeId;
+            while (currentId && String(currentId) !== String(rootId)) {
+              const currentNode = allNodesList.value.find(n => String(n.id) === String(currentId));
+              if (!currentNode || !currentNode.parent_id) break;
+              
+              const parent = allNodesList.value.find(n => String(n.id) === String(currentNode.parent_id));
+              if (!parent) break;
+              
+              // Dacă părintele e o instituție și NU e rădăcina pe care am clickuit-o
+              if (parent.is_institution === true && String(parent.id) !== String(rootId)) {
+                return parent.nume || parent.node_name || 'Instituție';
+              }
+              currentId = parent.id;
+            }
+            return null; // Dacă nu găsește o sub-instituție, returnează null
+          };
+
+          childDepartments.forEach(dept => {
+            const deptRows = dept.metadata?.hr_departament || [];
+            if (deptRows.length > 0) {
+              // Verificăm dacă acest departament aparține unei sub-instituții
+              const parentInstName = getParentInstitutionName(String(dept.id), String(node.id));
+              
+              // Dacă da, afișăm "Instituție ➔ Departament", altfel doar "Departament"
+              const headerTitle = parentInstName 
+                ? `${parentInstName} ➔ ${dept.nume || dept.node_name || 'Departament'}`
+                : (dept.nume || dept.node_name || 'Departament');
+
+              // HEADER Departament
+              combinedHrData.push({ isHeader: true, title: headerTitle });
+              combinedHrData.push(...deptRows.map(row => ({
+                functie: row.functie || '',
+                ocupate: row.ocupate || 0,
+                vacante: row.vacante || 0,
+                total: (row.ocupate || 0) + (row.vacante || 0),
+                statut: 'Activ',
+                finColumns: row.finColumns || [] 
+              })));
+            }
+          });
+
+          // 4. Aducem ROLURILE ca posturi (1 post per rol)
+          childRoles.forEach(role => {
+            const roleStatus = role.metadata?.role_statut || 'Vacant';
+            
+            // Verificăm și pentru rol dacă aparține unei sub-instituții
+            const parentInstName = getParentInstitutionName(String(role.id), String(node.id));
+            const headerTitle = parentInstName 
+              ? `${parentInstName} ➔ Rol: ${role.nume || role.node_name || 'N/A'}`
+              : `Rol: ${role.nume || role.node_name || 'N/A'}`;
+
+            // HEADER Rol
+            combinedHrData.push({ isHeader: true, title: headerTitle });
+            combinedHrData.push({
+              functie: role.nume || role.node_name || 'Rol Nedefinit',
+              ocupate: roleStatus === 'Activ' ? 1 : 0,
+              vacante: roleStatus === 'Vacant' ? 1 : 0,
+              total: 1,
+              statut: roleStatus,
+              finColumns: role.metadata?.role_fin_columns || [] 
+            });
+          });
+          // 5. Salvăm totul
+          userHrData.value = combinedHrData;
         }
         };
-
-        const handleDetailsClick = (node) => {
+       const handleDetailsClick = (node) => {
   const nodeData = allNodesList.value.find(n => String(n.id) === String(node.id));
   
-   if (nodeData && nodeData.is_department) {
+  if (nodeData && nodeData.is_committee) {
+    // CASA NOUĂ: Pentru Comisii
+    selectedCommitteeData.value = nodeData;
+    showCommitteePanel.value = true;
+    showProfilePanel.value = false;
+    showDepartmentPanel.value = false;
+    showRolePanel.value = false;
+  } else if (nodeData && nodeData.is_department) {
     selectedDepartmentData.value = nodeData;
     departmentProfileHrData.value = nodeData.metadata?.hr_departament || [];
     showDepartmentPanel.value = true;
     showProfilePanel.value = false;
     showRolePanel.value = false;
+    showCommitteePanel.value = false;
   } else if (nodeData && nodeData.is_institution === false) {
     selectedRoleData.value = nodeData;
     showRolePanel.value = true;
     showProfilePanel.value = false;
     showDepartmentPanel.value = false;
+    showCommitteePanel.value = false;
   } else {
     openUserDetails(node);
     showDepartmentPanel.value = false;
     showRolePanel.value = false;
+    showCommitteePanel.value = false;
   }
 };
 
 
 // --- POP-UP STRUCTURĂ H.R. (Pasul 3) ---
 const showHrPopup = ref(false);
+
 const hrPopupPos = ref({ x: 300, y: 200 }); // Poziția inițială în centru
 const isHrDragging = ref(false);
 const hrDragOffset = ref({ x: 0, y: 0 });
@@ -280,7 +450,23 @@ const startHrDrag = (e) => {
 
 const onHrDrag = (e) => {
   if (!isHrDragging.value) return;
-  hrPopupPos.value = { x: e.clientX - hrDragOffset.value.x, y: e.clientY - hrDragOffset.value.y };
+  
+  let newX = e.clientX - hrDragOffset.value.x;
+  let newY = e.clientY - hrDragOffset.value.y;
+
+  // Panoul HR are dimensiuni stocate în hrModalSize
+  const pWidth = parseInt(hrModalSize.value.width) || 650;
+  const pHeight = parseInt(hrModalSize.value.height) || 400;
+
+  const minX = -(pWidth - 100);
+  const maxX = window.innerWidth - 100;
+  const minY = 0;
+  const maxY = window.innerHeight - 50;
+
+  hrPopupPos.value = {
+    x: Math.max(minX, Math.min(newX, maxX)),
+    y: Math.max(minY, Math.min(newY, maxY))
+  };
 };
 
 const stopHrDrag = () => {
@@ -302,6 +488,11 @@ const closeProfilePanel = () => {
 const closeRolePanel = () => {
   showRolePanel.value = false;
   selectedRoleData.value = null;
+};
+
+const closeCommitteePanel = () => {
+  showCommitteePanel.value = false;
+  selectedCommitteeData.value = null;
 };
         const closeDepartmentPanel = () => {
   showDepartmentPanel.value = false;
@@ -450,6 +641,39 @@ const exportDepartmentPDF = () => {
   });
 };
 
+const exportCommitteePDF = () => {
+  const element = document.getElementById('committee-profile-pdf-section');
+  if (!element) return;
+
+  const clonedElement = element.cloneNode(true);
+  clonedElement.style.position = 'static';
+  clonedElement.style.margin = '0';
+  clonedElement.style.padding = '20px';
+
+  const wrapper = document.createElement('div');
+  wrapper.style.position = 'absolute';
+  wrapper.style.left = '-9999px';
+  wrapper.style.top = '0';
+  wrapper.style.width = '600px';
+  wrapper.style.background = 'white';
+  wrapper.appendChild(clonedElement);
+  
+  document.body.appendChild(wrapper);
+
+  const opt = { 
+    margin: [10, 10, 10, 10], 
+    filename: `Profil_Consiliu_${selectedCommitteeData.value?.node_name || selectedCommitteeData.value?.nume || 'comisie'}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+
+  html2pdf().set(opt).from(clonedElement).save().finally(() => {
+    document.body.removeChild(wrapper);
+  });
+};
+
 const adminAction = ref(null); // 'create', 'edit', sau null
 const adminFormData = ref({
   nume: '', 
@@ -474,6 +698,7 @@ const adminFormData = ref({
   role_baza_legala: '',
   role_reglementare: '',
   role_gradatie_treapta: '',
+  role_statut: 'Vacant',
 });
 
 let finColIdCounter = 0; // Contor pentru ID-uri unice de coloane
@@ -499,6 +724,49 @@ const newColName = ref('');
 const newColType = ref('valoare');
 const newColValue = ref(null);
 
+// --- LOGICĂ REDIMENSIONARE MODAL HR ---
+const hrModalSize = ref({ width: '850px', height: '70vh' }) // Dimensiuni inițiale
+const isResizingHrModal = ref(false)
+const resizeStartCoords = ref({ x: 0, y: 0, w: 0, h: 0 })
+
+function startHrModalResize(e) {
+  // Oprește propagarea ca să nu se închidă modalul dacă dai click pe overlay
+  e.stopPropagation() 
+  isResizingHrModal.value = true
+  resizeStartCoords.value = {
+    x: e.clientX,
+    y: e.clientY,
+    w: parseInt(hrModalSize.value.width),
+    h: parseInt(hrModalSize.value.height)
+  }
+  document.addEventListener('mousemove', doHrModalResize)
+  document.addEventListener('mouseup', stopHrModalResize)
+  
+  // Opțional: previne selectarea textului în timpul tragerii
+  document.body.style.userSelect = 'none'
+}
+
+function doHrModalResize(e) {
+  if (!isResizingHrModal.value) return
+  
+  // Calculează noua lățime și înălțime
+  let newW = resizeStartCoords.value.w + (e.clientX - resizeStartCoords.value.x)
+  let newH = resizeStartCoords.value.h + (e.clientY - resizeStartCoords.value.y)
+  
+  // Setează limite minime și maxime
+  newW = Math.max(500, Math.min(newW, window.innerWidth - 40))
+  newH = Math.max(400, Math.min(newH, window.innerHeight - 40))
+  
+  hrModalSize.value.width = `${newW}px`
+  hrModalSize.value.height = `${newH}px`
+}
+
+function stopHrModalResize() {
+  isResizingHrModal.value = false
+  document.removeEventListener('mousemove', doHrModalResize)
+  document.removeEventListener('mouseup', stopHrModalResize)
+  document.body.style.userSelect = ''
+}
 
 // --- SUPER FUNCȚIA PENTRU ADAUGARE (Asta o cheamă butonul din Modal) ---
 const handleFinColAdd = () => {
@@ -669,6 +937,16 @@ const addSporRow = () => {
 };
 const removeSporRow = (index) => {
   roleSporuriRows.value.splice(index, 1);
+};
+
+
+// --- LOGICĂ COMISIE / CONSILIU ---
+const committeeMembers = ref([]);
+const addCommitteeMember = () => {
+  committeeMembers.value.push({ nume: '', rol_in_comisie: '', functia_de_baza: '' });
+};
+const removeCommitteeMember = (index) => {
+  committeeMembers.value.splice(index, 1);
 };
 // --- LOGICĂ COLOANE FINANCIARE PENTRU ROL ---
 const roleFinColumns = ref([]); // Array-ul care va ține coloanele orizontale
@@ -922,11 +1200,19 @@ watch([allNodesList, currentRootId, currentView], async ([newList, newRoot, newV
 
 // 6. Interacțiuni pe Graph
 const onNodeClick = (event) => {
-  // INTERCEPTARE MUTARE: Dacă suntem în modul "Muta", așteptăm click pe noul părinte
+  // 1. VERIFICARE FORMULAR DESCHIS
+  if (adminAction.value) {
+    const confirmLeave = window.confirm("Ai modificări nesalvate în formularul de administrare. Sigur vrei să abandonezi și să navighezi în graf?");
+    if (!confirmLeave) return; // Dacă dă Cancel, oprim execuția
+    adminAction.value = null; // Dacă dă OK, închidem formularul
+    adminMessage.value = { text: '', type: '' };
+  }
+
+  // INTERCEPTARE MUTARE
   if (isMoveMode.value) {
     moveTargetNode.value = event.node;
     executeMove();
-    return; // Oprim aici, nu face drill-down
+    return;
   }
 
   const clickedNodeId = String(event.node.id);
@@ -939,7 +1225,7 @@ const onNodeClick = (event) => {
     return; 
   }
 
-  // LOGICA NORMALĂ (Pentru Utilizator și Admin)
+  // LOGICA NORMALĂ
   if (clickedNode && clickedNode.parent_id !== null && clickedNodeId !== currentRootId.value) {
     navigationStack.value.push(currentRootId.value);
     currentRootId.value = clickedNodeId;
@@ -948,17 +1234,30 @@ const onNodeClick = (event) => {
 
 // Selectare nod exclusiv prin Click Dreapta (pt Admin) - ACUM ESTE SEPARAT CORECT
 const onNodeRightClick = (event) => {
-  // Oprim meniul implicit al browserului
   event.event.preventDefault();
 
-  // Dacă nu e admin sau panoul de unelte nu e deschis, ignoră
   if (userRole.value !== 'admin' || !showAdminTools.value) return;
 
-  // Setăm nodul ca fiind selectat (acesta va declanșa watch-ul pentru chenarul galben)
+  // VERIFICARE FORMULAR DESCHIS
+  if (adminAction.value) {
+    const confirmLeave = window.confirm("Ai modificări nesalvate. Sigur vrei să selectezi alt nod?");
+    if (!confirmLeave) return;
+    adminAction.value = null;
+    adminMessage.value = { text: '', type: '' };
+  }
+
   selectedAdminNode.value = event.node;
 };
 
 const goBack = () => {
+  // VERIFICARE FORMULAR DESCHIS
+  if (adminAction.value) {
+    const confirmLeave = window.confirm("Ai modificări nesalvate. Sigur vrei să mergi înapoi?");
+    if (!confirmLeave) return;
+    adminAction.value = null;
+    adminMessage.value = { text: '', type: '' };
+  }
+
   if (navigationStack.value.length > 0) {
     currentRootId.value = navigationStack.value.pop();
     updateLayout();
@@ -989,9 +1288,25 @@ const startDrag = (e) => {
 
 const onDrag = (e) => {
   if (!isDragging.value) return;
+  
+  let newX = e.clientX - dragOffset.value.x;
+  let newY = e.clientY - dragOffset.value.y;
+
+  // Obținem dimensiunile reale ale panoului de admin
+  const panel = document.querySelector('.admin-tools-panel');
+  const pWidth = panel ? panel.offsetWidth : 260;
+  const pHeight = panel ? panel.offsetHeight : 400;
+
+  // Limităm X: permitem să iasă parțial, dar cel puțin 100px rămân vizibile
+  const minX = -(pWidth - 100);
+  const maxX = window.innerWidth - 100;
+  // Limităm Y: nu permitem să urce deasupra paginii (y=0) și să lase 50px jos
+  const minY = 0;
+  const maxY = window.innerHeight - 50;
+
   adminPanelPos.value = {
-    x: e.clientX - dragOffset.value.x,
-    y: e.clientY - dragOffset.value.y
+    x: Math.max(minX, Math.min(newX, maxX)),
+    y: Math.max(minY, Math.min(newY, maxY))
   };
 };
 
@@ -1030,11 +1345,28 @@ watch(selectedAdminNode, (newNode) => {
 const handleAdminCreate = () => {
   if (!selectedAdminNode.value) return;
   adminAction.value = 'create';
-          adminFormData.value = { nume: '', tip_institutie: '', news: '', relatie: '', is_institution: true, is_department: false };  
-  hrRows.value = []; 
+          adminFormData.value = { nume: '', tip_institutie: '', news: '', relatie: '', is_institution: true, is_department: false,  is_office: false,    is_committee: false, };
+
+      hrRows.value = []; 
   sourceRows.value = []; 
   roleFinColumns.value = []; // GOLIM COLOANELE FINANCIARE ROL
+  committeeMembers.value = []; // GOLIM MEMBRII COMISIE
   adminMessage.value = { text: '', type: '' };
+};
+
+// Funcție pentru a permite selectarea unui singur tip de nod (CU TOGGLE CORECT)
+const setNodeType = (type) => {
+  // Resetăm totul la false (dacă apelezi 'role', rămâne totul false, perfect)
+  adminFormData.value.is_institution = false;
+  adminFormData.value.is_department = false;
+  adminFormData.value.is_office = false;
+  adminFormData.value.is_committee = false;
+  
+  // Dacă e un tip specific, îl setăm pe true
+  if (type === 'institution') adminFormData.value.is_institution = true;
+  else if (type === 'department') adminFormData.value.is_department = true;
+  else if (type === 'office') adminFormData.value.is_office = true;
+  else if (type === 'committee') adminFormData.value.is_committee = true;
 };
 
 const cancelAdminAction = () => {
@@ -1069,8 +1401,11 @@ const handleAdminEdit = async () => {
         const parentNode = allNodesList.value.find(n => String(n.id) === String(nodeData.parent_id));
         return parentNode ? (parentNode.nume || parentNode.node_name) : '';
       })(),
-              is_institution: nodeData.is_institution ?? true, // ADAUGAT AICI
+               is_institution: nodeData.is_institution ?? true,
         is_department: nodeData.is_department ?? false,
+        is_office: nodeData.is_office ?? false,         // <-- ADAUGĂ ASTA
+        is_committee: nodeData.is_committee ?? false,   // <-- ADAUGĂ ASTA
+
       };
 
        imagePreview.value = nodeData.metadata?.imagine || null;
@@ -1080,10 +1415,12 @@ const handleAdminEdit = async () => {
       adminFormData.value.role_baza_legala = nodeData.metadata?.baza_legala || '';
             adminFormData.value.role_reglementare = nodeData.metadata?.reglementare || '';
       adminFormData.value.role_gradatie_treapta = nodeData.metadata?.gradatie_treapta || '';
+      adminFormData.value.role_statut = nodeData.metadata?.role_statut || 'Vacant';
 
       
       if (nodeData.metadata?.sporuri && Array.isArray(nodeData.metadata.sporuri)) {
         roleSporuriRows.value = nodeData.metadata.sporuri.map(s => ({ nume: s.nume || '' }));
+        committeeMembers.value = nodeData.metadata?.committee_members || []; // ÎNCĂRCĂM MEMBRII COMISIE
           } else {
       roleSporuriRows.value = [];
     }
@@ -1197,6 +1534,7 @@ const saveAdminNode = async () => {
         baza_legala: adminFormData.value.role_baza_legala,
         reglementare: adminFormData.value.role_reglementare,
         gradatie_treapta: adminFormData.value.role_gradatie_treapta,
+         role_statut: adminFormData.value.role_statut,
                       sporuri: roleSporuriRows.value,
               role_fin_columns: roleFinColumns.value, // SALVARE COLOANE FINANCIARE ROL
                      // Salvare date DEPARTAMENT
@@ -1206,8 +1544,10 @@ const saveAdminNode = async () => {
         calitate_bugetara: adminFormData.value.calitate_bugetara
       }, 
 
-      is_institution: adminFormData.value.is_institution,
-is_department: adminFormData.value.is_department
+           is_institution: adminFormData.value.is_institution,
+      is_department: adminFormData.value.is_department,
+      is_office: adminFormData.value.is_office,
+      is_committee: adminFormData.value.is_committee
     };
 
     const res = await supabase.from('organograms').insert([insertData]).select();
@@ -1292,14 +1632,18 @@ is_department: adminFormData.value.is_department
             baza_legala: adminFormData.value.role_baza_legala,
             reglementare: adminFormData.value.role_reglementare,
             gradatie_treapta: adminFormData.value.role_gradatie_treapta,
+             role_statut: adminFormData.value.role_statut,
            sporuri: roleSporuriRows.value,
             role_fin_columns: roleFinColumns.value, // SALVARE COLOANE FINANCIARE ROL
             rof: adminFormData.value.department_rof,
             hr_departament: departmentHrRows.value,
-        calitate_bugetara: adminFormData.value.calitate_bugetara
+        calitate_bugetara: adminFormData.value.calitate_bugetara,
+        committee_members: committeeMembers.value,
           },
-          is_institution: adminFormData.value.is_institution,
-          is_department: adminFormData.value.is_department  
+                    is_institution: adminFormData.value.is_institution,
+          is_department: adminFormData.value.is_department,
+          is_office: adminFormData.value.is_office,
+          is_committee: adminFormData.value.is_committee 
         })
         .eq('id', nodeId)
         .select();
@@ -1382,13 +1726,15 @@ is_department: adminFormData.value.is_department
         baza_legala: adminFormData.value.role_baza_legala,
         reglementare: adminFormData.value.role_reglementare,
         gradatie_treapta: adminFormData.value.role_gradatie_treapta,
+         role_statut: adminFormData.value.role_statut,
                      sporuri: roleSporuriRows.value,
               role_fin_columns: roleFinColumns.value, // FIX: Actualizare locală pentru Profil
                       // Salvare date DEPARTAMENT
               rof: adminFormData.value.department_rof,
               hr_departament: departmentHrRows.value,
               // Salvare date INSTITUȚIE
-              calitate_bugetara: adminFormData.value.calitate_bugetara
+              calitate_bugetara: adminFormData.value.calitate_bugetara,
+               committee_members: committeeMembers.value,
             }, 
           };
             }
@@ -1547,13 +1893,15 @@ function buildElements(list, rootId) {
     return 'node-national';
   };
 
-        const getNodeClass = (node) => {
+            const getNodeClass = (node) => {
       if (node.is_department) return 'node-department';
+      if (node.is_office) return 'node-office';
+      if (node.is_committee) return 'node-committee';
       if (node.is_institution === false) return 'node-role';
       return getBaseClass(node);
     };
 
-    const rootClass = getNodeClass(rootNode);
+       const rootClass = getNodeClass(rootNode);
     const rootSubCount = rootNode.children ? rootNode.children.length : 0;
   nodes.push({
     id: String(rootNode.id),
@@ -1561,7 +1909,7 @@ function buildElements(list, rootId) {
     position: { x: 0, y: 0 }, 
     class: `${rootClass} fade-in is-visible`,
     data: { subCount: rootSubCount, imagine: rootNode.metadata?.imagine || null },
-    style: { width: '270px', height: '60px' }
+    style: { width: '270px', height: '60px' } // REVENIT LA SIMPLU
   });
 
   if (rootNode.children && rootNode.children.length > 0) {
@@ -1575,7 +1923,7 @@ function buildElements(list, rootId) {
         position: { x: 0, y: 150 }, 
         class: `${childClass} fade-in is-visible`,
         data: { subCount: childSubCount, imagine: child.metadata?.imagine || null }, 
-        style: { width: '270px', height: '60px' }
+        style: { width: '270px', height: '60px' } // REVENIT LA SIMPLU
       });
 
             // Determinăm culoarea liniei în funcție de context
@@ -1599,25 +1947,21 @@ function buildElements(list, rootId) {
 
 // 8. Funcții de fetch
 const fetchAllInstitutions = async () => {
-  // 1. Aducem rădăcinile (tabelul institutii)
   const { data: roots, error: err1 } = await supabase.from('institutii').select('id, nume');
-  
-  // 2. Aducem copiii (tabelul organograms)
   const { data: children, error: err2 } = await supabase.from('organograms').select('id, node_name');
 
   let combined = [];
-  
-  if (!err1 && roots) {
-    combined = roots.map(r => ({ id: r.id, nume: r.nume }));
-  }
-  
+  if (!err1 && roots) combined = roots.map(r => ({ id: r.id, nume: r.nume }));
   if (!err2 && children) {
-    // IMPORTANT: Redenumim 'node_name' în 'nume' ca să funcționeze template-ul fără modificări
     const normalizedChildren = children.map(c => ({ id: c.id, nume: c.node_name }));
     combined = [...combined, ...normalizedChildren];
   }
 
-  allInstitutions.value = combined;
+  // CHEIA OPTIMIZĂRII: Curățăm diacriticele O SINGURĂ DATĂ la încărcare
+  allInstitutions.value = combined.map(inst => ({
+    ...inst,
+    nume_curat: removeDiacritics(inst.nume) // Adăugăm un câmp ascuns curățat
+  }));
 };
 const fetchJudete = async () => {
   const { data, error } = await supabase.from('judete').select('id, nume').order('nume', { ascending: true });
@@ -2090,22 +2434,47 @@ const handleDeleteAccount = async () => {
           Anulează Mutarea
         </button>
       </div>
+ <div v-if="adminAction === 'create' || adminAction === 'edit'" class="new-admin-form">
 
 
-
-      <!-- FORMULAR COMPLET (Apare DOAR la Creează sau Editează) -->
-      <div v-else-if="adminAction === 'create' || adminAction === 'edit'" class="new-admin-form">
-             <!-- SELECTOR TIP NOD (Comun pentru toate formularele) -->
+            <!-- SELECTOR TIP NOD (Comun pentru toate formularele) -->
         <div class="relation-admin-section" style="margin-bottom: 0; padding-bottom: 10px;">
           <label style="margin-bottom: 10px;">Tip entitate</label>
-          <div style="display: flex; gap: 20px; margin-top: 5px;">
+          <div style="display: flex; gap: 20px; margin-top: 5px; flex-wrap: wrap;">
             <label class="checkbox-label">
-              <input type="checkbox" v-model="adminFormData.is_institution" :disabled="isSavingNode" @change="$event.target.checked && (adminFormData.is_department = false)" />
+              <input type="checkbox" 
+                     :checked="adminFormData.is_institution" 
+                     :disabled="isSavingNode" 
+                     @change="setNodeType('institution')" />
               Instituție
             </label>
             <label class="checkbox-label">
-              <input type="checkbox" v-model="adminFormData.is_department" :disabled="isSavingNode" @change="$event.target.checked && (adminFormData.is_institution = false)" />
+              <input type="checkbox" 
+                     :checked="adminFormData.is_department" 
+                     :disabled="isSavingNode" 
+                     @change="setNodeType('department')" />
               Compartiment / Departament
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" 
+                     :checked="adminFormData.is_office" 
+                     :disabled="isSavingNode" 
+                     @change="setNodeType('office')" />
+              Birou
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" 
+                     :checked="adminFormData.is_committee" 
+                     :disabled="isSavingNode" 
+                     @change="setNodeType('committee')" />
+              Comisie / Consiliu
+            </label>
+                       <label class="checkbox-label">
+              <input type="checkbox" 
+                     :checked="!adminFormData.is_institution && !adminFormData.is_department && !adminFormData.is_office && !adminFormData.is_committee" 
+                     :disabled="isSavingNode" 
+                     @change="setNodeType('role')" />
+              Rol
             </label>
           </div>
         </div>
@@ -2231,29 +2600,12 @@ const handleDeleteAccount = async () => {
       </button>
     </td>
 
-    <!-- COLOANELE DINAMICE (Redesign curat și larg) -->
-    <td v-for="col in row.finColumns" :key="col.id" class="td-dynamic-col">
-      <div class="dynamic-col-wrapper">
-        <!-- Numele coloanei -->
-        <input type="text" v-model="col.name" placeholder="Nume venit" class="clean-input col-name-input" :disabled="isSavingNode" />
-        
-        <!-- Valoarea (spațiu mare) -->
-        <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." class="clean-input col-value-input" :disabled="isSavingNode" />
-        <input v-else type="number" v-model.number="col.value" placeholder="0" class="clean-input col-value-input" :disabled="isSavingNode" />
-        
-        <!-- Toolbar: Tip calcul + Buton Șterge -->
-        <div class="col-toolbar">
-          <select v-model="col.type" class="clean-select" :disabled="isSavingNode">
-            <option value="valoare">Valoare (Lei)</option>
-            <option value="procent">Procent (%)</option>
-            <option value="text">Text</option>
-          </select>
-          <button @click="removeFinColFromRow(index, col.id)" class="btn-delete-col" :disabled="isSavingNode" title="Șterge coloana">
-            ✕
-          </button>
-        </div>
-      </div>
-    </td> 
+    <!-- COLOANELE DINAMICE (Componentă separată) -->
+      <DynamicFinTable 
+      :columns="row.finColumns" 
+      :disabled="isSavingNode" 
+      @remove-col="(colId) => removeFinColFromRow(index, colId)" 
+    />
     
     <!-- BUTON ȘTERGE RÂND -->
     <td class="td-center td-action">
@@ -2272,8 +2624,7 @@ const handleDeleteAccount = async () => {
     <td :colspan="8 + masterInstFinColumns.length" style="text-align:center; color:#94a3b8; padding: 20px;">Nu au fost adăugate posturi</td>
   </tr>
 </tbody>
-        <!-- AM ȘTERS ACEL </tbody> DESCHIS ÎN PLUS CARE ERA AICI -->
-
+        
         <!-- OPȚIONAL: Total General la baza tabelului -->
         <tfoot v-if="hrRows.length > 0">
           <tr>
@@ -2317,12 +2668,12 @@ const handleDeleteAccount = async () => {
 </div>
       </template>
 
-      <!-- ==================== FORMULAR PENTRU DEPARTAMENT ==================== -->
-      <template v-else-if="adminFormData.is_department">
-        <div class="form-top-half">
+      <!-- ==================== FORMULAR PENTRU DEPARTAMENT/BIROU ==================== -->
+      <template v-else-if="adminFormData.is_department || adminFormData.is_office">
+              <div class="form-top-half">
           <div class="details-grid-3col">
             <div class="col-labels">
-              <label>Denumire departament *</label>
+              <label>{{ adminFormData.is_office ? 'Denumire birou' : 'Denumire departament' }} *</label>
               <label>Referință reglementare</label>
               <label>Subordonare</label>
             </div>
@@ -2370,24 +2721,12 @@ const handleDeleteAccount = async () => {
                 <td class="td-center"><input type="number" v-model.number="row.vacante" min="0" class="clean-input input-sm" :disabled="isSavingNode" /></td>
                 <td><input type="text" v-model="row.observatii" placeholder="Detalii" class="clean-input" :disabled="isSavingNode" /></td>
                 
-                <!-- COLOANELE DINAMICE (Redesign curat) -->
-                <td v-for="col in row.finColumns" :key="col.id" class="td-dynamic-col">
-                  <div class="dynamic-col-wrapper">
-                    <input type="text" v-model="col.name" placeholder="Nume venit" class="clean-input col-name-input" :disabled="isSavingNode" />
-                    <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." class="clean-input col-value-input" :disabled="isSavingNode" />
-                    <input v-else type="number" v-model.number="col.value" placeholder="0" class="clean-input col-value-input" :disabled="isSavingNode" />
-                    <div class="col-toolbar">
-                      <select v-model="col.type" class="clean-select" :disabled="isSavingNode">
-                        <option value="valoare">Valoare (Lei)</option>
-                        <option value="procent">Procent (%)</option>
-                        <option value="text">Text</option>
-                      </select>
-                      <button @click="removeFinColFromDeptRow(index, col.id)" class="btn-delete-col" :disabled="isSavingNode" title="Șterge coloana">
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                </td>
+                               <!-- COLOANELE DINAMICE (Componentă separată) -->
+                <DynamicFinTable 
+                  :columns="row.finColumns" 
+                  :disabled="isSavingNode" 
+                  @remove-col="(colId) => removeFinColFromDeptRow(index, colId)" 
+                />
 
                 <!-- BUTON ADAUGĂ VENIT (Deschide Modal-ul) -->
                 <td class="td-center td-action">
@@ -2423,11 +2762,66 @@ const handleDeleteAccount = async () => {
             </tfoot>
           </table>
           </div>
-          </template> <!-- <--- ASTA ESTE LINIA CARE LIPSEA! Trebuie să închizi template-ul de Departament -->
+          </template> 
+
+                <!-- ==================== FORMULAR PENTRU COMISIE / CONSILIU ==================== -->
+      <template v-else-if="adminFormData.is_committee">
+        <div class="form-top-half">
+          <div class="details-grid-3col">
+            <div class="col-labels">
+              <label>Denumire comisie *</label>
+              <label>Bază legală de înființare</label>
+              <label>Subordonare (Coordonare)</label>
+            </div>
+            <div class="col-inputs">
+              <input type="text" v-model="adminFormData.nume" placeholder="ex: Comisia de Audiere" :disabled="isSavingNode" />
+              <input type="text" v-model="adminFormData.department_rof" placeholder="ex: HG nr. 123/2023" :disabled="isSavingNode" />
+              <input type="text" v-model="adminFormData.relatie" placeholder="ex: Președintele instituției" :disabled="isSavingNode" />
+            </div>
+            <div class="col-rol">
+              <label>Rol / Atribuții comisie</label>
+              <textarea v-model="adminFormData.rol" placeholder="Descrierea detaliată a rolului, atribuțiilor și competențelor comisiei..." style="min-height: 120px;" :disabled="isSavingNode"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-bottom-half">
+          <div class="hr-header">
+            <span>Componenta Comisiei / Consiliului</span>
+            <button class="add-hr-btn" @click="addCommitteeMember" :disabled="isSavingNode">+ Adaugă Membru</button>
+          </div>
+
+          <table class="hr-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;" class="td-center">Nr. Crt.</th>
+                <th>Reprezentantul</th>
+                <th>Rol în comisie</th>
+                <th>Funcția de bază</th>
+                <th style="width: 60px;" class="td-center"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(membru, index) in committeeMembers" :key="'membru-'+index">
+                <td class="td-center">{{ index + 1 }}</td>
+                <td><input type="text" v-model="membru.nume" placeholder="ex: Reprezentant APG Guvern" class="clean-input" :disabled="isSavingNode" /></td>
+                <td><input type="text" v-model="membru.rol_in_comisie" placeholder="ex: Președinte" class="clean-input" :disabled="isSavingNode" /></td>
+                <td><input type="text" v-model="membru.functia_de_baza" placeholder="ex: Director Executiv" class="clean-input" :disabled="isSavingNode" /></td>
+                <td class="td-center">
+                  <button class="remove-row-btn" @click="removeCommitteeMember(index)" :disabled="isSavingNode">✕</button>
+                </td>
+              </tr>
+              <tr v-if="committeeMembers.length === 0">
+                <td colspan="5" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugați membri</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
 
 
             <!-- ==================== FORMULAR PENTRU ROL ==================== -->
-      <template v-else>
+            <template v-else-if="!adminFormData.is_institution && !adminFormData.is_department && !adminFormData.is_office && !adminFormData.is_committee">
         <!-- SECȚIUNEA 1: IDENTITATE ROL (3 coloane) -->
         <div class="form-top-half">
           <div class="details-grid-3col">
@@ -2446,6 +2840,13 @@ const handleDeleteAccount = async () => {
               <input type="text" v-model="adminFormData.role_reglementare" placeholder="ex: HG nr. Y/2022" :disabled="isSavingNode" />
               <input type="text" v-model="adminFormData.relatie" placeholder="ex: Ministrul X" :disabled="isSavingNode" />
               <input type="text" v-model="adminFormData.program" placeholder="ex: Luni 10:00-12:00" :disabled="isSavingNode" />
+            </div>
+             <div class="form-group" style="margin-top: 10px;">
+             <label style="font-size: 0.85rem; color: #64748b; margin-bottom: 4px; display: block;">Statut Post Rol</label>
+              <select v-model="adminFormData.role_statut" class="admin-input" style="width: 100%;">
+                <option value="Activ">Activ (Ocupat)</option>
+                <option value="Vacant">Vacant</option>
+              </select>
             </div>
             <div class="col-rol">
               <label>Descrierea rolului</label>
@@ -2474,29 +2875,12 @@ const handleDeleteAccount = async () => {
               <!-- Rândul principal cu veniturile -->
               <tr v-if="roleFinColumns.length > 0">
                 
-                <!-- COLOANELE DINAMICE -->
-                <td v-for="col in roleFinColumns" :key="col.id" class="td-dynamic-col">
-                  <div class="dynamic-col-wrapper">
-                    <!-- Numele venitului -->
-                    <input type="text" v-model="col.name" placeholder="Nume venit" class="clean-input col-name-input" :disabled="isSavingNode" />
-                    
-                    <!-- Valoarea -->
-                    <input v-if="col.type === 'text'" type="text" v-model="col.value" placeholder="Detalii..." class="clean-input col-value-input" :disabled="isSavingNode" />
-                    <input v-else type="number" v-model.number="col.value" placeholder="0" class="clean-input col-value-input" :disabled="isSavingNode" />
-                    
-                    <!-- Toolbar (Select + Buton Sterge) -->
-                    <div class="col-toolbar">
-                      <select v-model="col.type" class="clean-select" :disabled="isSavingNode">
-                        <option value="valoare">Valoare (Lei)</option>
-                        <option value="procent">Procent (%)</option>
-                        <option value="text">Text</option>
-                      </select>
-                      <button @click="removeRoleFinCol(col.id)" class="btn-delete-col" :disabled="isSavingNode" title="Șterge coloana">
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                </td>
+                               <!-- COLOANELE DINAMICE (Componentă separată) -->
+                <DynamicFinTable 
+                  :columns="roleFinColumns" 
+                  :disabled="isSavingNode" 
+                  @remove-col="removeRoleFinCol" 
+                />
 
                 <!-- TOTAL CALCULAT LIVE -->
                 <td class="td-total" style="background: #fefce8 !important; color: #ca8a04 !important; min-width: 140px;">
@@ -2669,16 +3053,35 @@ const handleDeleteAccount = async () => {
                     <th>Statut</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr v-for="(row, index) in userHrData" :key="'pdf-'+index">
-                    <td style="text-align: center;">{{ index + 1 }}</td>
-                    <td>{{ row.functie || '-' }}</td>
-                    <td style="text-align: center;">{{ row.ocupate || 0 }}</td>
-                    <td style="text-align: center;">{{ row.vacante || 0 }}</td>
-                    <td style="text-align: center;">{{ (row.ocupate || 0) + (row.vacante || 0) }}</td>
-                    <td>{{ row.statut || '-' }}</td>
-                  </tr>
-                </tbody>
+                  
+      <tbody>
+        <template v-for="(row, index) in userHrData" :key="'hr-popup-'+index">
+          
+          <!-- RÂND HEADER (Aici afișăm Numele Departamentului / Rolului) -->
+          <tr v-if="row.isHeader" class="td-group-header">
+            <td colspan="6" style="background: #f1f5f9; font-weight: 800; text-align: left; padding: 12px 8px; border-bottom: 2px solid #cbd5e1; color: #1e293b;">
+              🏛️ {{ row.title }}
+            </td>
+          </tr>
+
+          <!-- RÂND NORMAL (Posturile HR) -->
+          <tr v-else>
+            <td style="text-align: center;">{{ index + 1 }}</td>
+            <td>{{ row.functie || '-' }}</td>
+            <td style="text-align: center;">{{ row.ocupate || 0 }}</td>
+            <td style="text-align: center;">{{ row.vacante || 0 }}</td>
+            <td style="text-align: center;">{{ (row.ocupate || 0) + (row.vacante || 0) }}</td>
+            <td style="text-align: center;">{{ row.statut || '-' }}</td>
+          </tr>
+
+        </template>
+        
+        <tr v-if="userHrData.length === 0">
+          <td colspan="6" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
+        </tr>
+      </tbody>
+
+                            
               </table>
             </div>
           </div>
@@ -2936,46 +3339,131 @@ const handleDeleteAccount = async () => {
 
         </div> <!-- Închidere panel-body -->
       </div>
-    </transition>   
+    </transition> 
+
+    <!-- PANOU PROFIL COMISIE / CONSILIU -->
+    <transition name="slide-panel">
+      <div v-if="showCommitteePanel" class="panel-left">
+        <div class="panel-header">
+          <h1>Profil Comisie</h1>
+          <button class="panel-close-btn" @click="closeCommitteePanel">✕</button>
+        </div>
+        
+        <div class="panel-body" id="committee-profile-pdf-section">
+          
+          <!-- 1. Identitate Comisie -->
+          <div class="profile-section" v-if="selectedCommitteeData">
+            <div class="section-title">Identitate Comisie</div>
+            <div class="contact-grid">
+              <span class="c-label">Denumire comisie</span> 
+              <div class="c-value">{{ selectedCommitteeData.nume || selectedCommitteeData.node_name || '-' }}</div>
+              <span class="c-label">Bază legală de înființare</span> 
+              <div class="c-value">{{ selectedCommitteeData.metadata?.rof || '-' }}</div>
+              <span class="c-label">Subordonare (Coordonare)</span> 
+              <div class="c-value">{{ selectedCommitteeData.metadata?.relatie_superioara || '-' }}</div>
+            </div>
+          </div>
+
+          <!-- 2. Rol / Atribuții -->
+          <div class="profile-section" v-if="selectedCommitteeData">
+            <div class="section-title">Rol / Atribuții</div>
+            <p style="font-size: 0.9rem; color: #334155; line-height: 1.6; margin: 0;">
+              {{ selectedCommitteeData.rol || 'Nu există descriere disponibilă.' }}
+            </p>
+          </div>
+
+          <!-- 3. Componenta Comisiei -->
+          <div class="profile-section" v-if="selectedCommitteeData">
+            <div class="section-title">Componenta Comisiei</div>
+            <table class="sources-profile-table">
+              <thead>
+                <tr>
+                  <th style="width: 60px; text-align: center;">Nr. Crt.</th>
+                  <th>Reprezentantul</th>
+                  <th>Rol în comisie</th>
+                  <th>Funcția de bază</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(membru, index) in (selectedCommitteeData.metadata?.committee_members || [])" :key="'com-mem-'+index">
+                  <td style="text-align: center;">{{ index + 1 }}</td>
+                  <td>{{ membru.nume || '-' }}</td>
+                  <td>{{ membru.rol_in_comisie || '-' }}</td>
+                  <td>{{ membru.functia_de_baza || '-' }}</td>
+                </tr>
+                <tr v-if="!selectedCommitteeData.metadata?.committee_members || selectedCommitteeData.metadata.committee_members.length === 0">
+                  <td colspan="4" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugați membri în comisie.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- BUTON EXPORT PDF (Aici poți adăuga logică pentru PDF mai târziu dacă vrei) -->
+          <div class="profile-pdf-actions" style="margin-top: 20px;">
+           <button class="btn-export-profile-pdf" @click="exportCommitteePDF">Exportă Profil PDF</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+      
         <!-- POP-UP TABEL STRUCTURĂ H.R. -->
-    <div 
-      v-if="showHrPopup" 
-      class="hr-popup-container"
-      :style="{ left: hrPopupPos.x + 'px', top: hrPopupPos.y + 'px' }"
-    >
-      <!-- Header pentru Drag -->
-      <div class="hr-popup-header" @mousedown="startHrDrag">
-        <span class="hr-popup-title">Structura H.R.</span>
-        <button class="hr-popup-close" @click="closeHrPopup">✕</button>
-      </div>
+ <div 
+  v-if="showHrPopup" 
+  class="hr-popup-container hr-modal-container"
+  :style="{ left: hrPopupPos.x + 'px', top: hrPopupPos.y + 'px', width: hrModalSize.width, height: hrModalSize.height }"
+  @mousedown.stop
+>
+  <!-- Header pentru Drag -->
+  <div class="hr-modal-header" @mousedown="startHrDrag">
+    <span class="hr-popup-title">Structura H.R.</span>
+    <button class="hr-popup-close" @click="closeHrPopup">✕</button>
+  </div>
 
-      <!-- Tabelul cu date reale -->
-      <div class="hr-popup-body">
-        <table class="hr-popup-table">
-          <thead>
-            <tr>
-              <th>Nr. Crt.</th>
-              <th>Denumire Post</th>
-              <th>Ocupate</th>
-              <th>Vacante</th>
-              <th>Total Posturi</th>
-              <th>Statut</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, index) in userHrData" :key="index">
-              <td style="text-align: center;">{{ index + 1 }}</td>
-              <td>{{ row.functie || '-' }}</td>
-              <td style="text-align: center;">{{ row.ocupate || 0 }}</td>
-              <td style="text-align: center;">{{ row.vacante || 0 }}</td>
-              <td style="text-align: center;">{{ (row.ocupate || 0) + (row.vacante || 0) }}</td>
-              <td style="text-align: center;">{{ row.statut || '-' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+  <!-- ÎNCEPE ZONA DE SCROLL -->
+  <div class="hr-modal-body">
+    
+    <!-- Tabelul cu date reale (am scos vechiul div hr-popup-body, nu mai e nevoie de el) -->
+       <table class="hr-popup-table">
+      <thead>
+        <tr>
+          <th>Nr. Crt.</th>
+          <th>Denumire Post</th>
+          <th>Ocupate</th>
+          <th>Vacante</th>
+          <th>Total Posturi</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template v-for="(row, index) in userHrData" :key="'hr-popup-'+index">
+          
+          <!-- RÂND HEADER (Aici afișăm Numele Departamentului / Rolului) -->
+          <tr v-if="row.isHeader" class="td-group-header">
+            <td colspan="6" style="background: #f1f5f9; font-weight: 800; text-align: left; padding: 12px 8px; border-bottom: 2px solid #cbd5e1; color: #1e293b;">
+              🏛️ {{ row.title }}
+            </td>
+          </tr>
 
+          <!-- RÂND NORMAL (Posturile HR) -->
+          <tr v-else>
+            <td style="text-align: center;">{{ index + 1 }}</td>
+            <td>{{ row.functie || '-' }}</td>
+            <td style="text-align: center;">{{ row.ocupate || 0 }}</td>
+            <td style="text-align: center;">{{ row.vacante || 0 }}</td>
+            <td style="text-align: center;">{{ (row.ocupate || 0) + (row.vacante || 0) }}</td>
+            <td style="text-align: center;">{{ row.statut || '-' }}</td>
+          </tr>
+
+        </template>
+      </tbody>
+    </table>
+
+  </div> <!-- AICI SE ÎNCHIDE ZONA DE SCROLL -->
+
+  <!-- COLȚUL DE TRAGERE PENTRU REDIMENSIONARE -->
+  <div class="hr-resize-handle" @mousedown.prevent="startHrModalResize"></div>
+
+</div> <!-- AICI SE ÎNCHIDE hr-modal-container -->
     <!-- Lightbox Imagine Instituție -->
     <transition name="fade">
       <div v-if="showLightbox" class="lightbox-overlay" @click="closeLightbox">
@@ -3247,6 +3735,39 @@ AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
   }
 }
 
+.node-office .custom-node-container {
+  background: linear-gradient(145deg, #008000, #006600) !important;
+  border-radius: 25px !important;
+  border-color: #004d00 !important;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.15), 
+    -2px -2px 6px rgba(255, 255, 255, 0.5), 
+    inset -2px -2px 4px rgba(0, 0, 0, 0.05),  
+    inset 2px 2px 4px rgba(255, 255, 255, 0.7) !important; 
+
+  .node-label { 
+    color: #ffffff !important; 
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3) !important; 
+    font-size: 0.8rem !important; 
+  }
+}
+
+.node-committee .custom-node-container {
+  background: linear-gradient(145deg, #7FFFD4, #66DDAA) !important;
+  border-radius: 25px !important;
+  border-color: #4DCC99 !important;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.15), 
+    -2px -2px 6px rgba(255, 255, 255, 0.5), 
+    inset -2px -2px 4px rgba(0, 0, 0, 0.05),  
+    inset 2px 2px 4px rgba(255, 255, 255, 0.7) !important; 
+
+  .node-label { 
+    color: #004d40 !important; /* Text închis pentru contrast maxim */
+    text-shadow: none !important; 
+    font-size: 0.8rem !important; 
+  }
+}
 .vue-flow__node { transition: opacity 0.3s ease, transform 0.3s ease; }
 .fade-in { opacity: 0; transform: scale(0.9); }
 .fade-in.is-visible { opacity: 1; transform: scale(1); }
@@ -5050,4 +5571,139 @@ AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
   font-size: 14px !important;
 }
 .btn-confirm-modal:hover { background: #2563eb !important; }
+
+/* Containerul principal al modalului */
+.hr-modal-container {
+  /* Am scos position: fixed și z-index pentru că le are deja în hr-popup-container */
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Antetul - nu se micșorează și nu intră în scroll */
+.hr-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  flex-shrink: 0; /* FOARTE IMPORTANT: Fixează antetul */
+  border-radius: 12px 12px 0 0;
+}
+
+.hr-modal-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.close-btn:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Body-ul - ocupă tot spațiul rămas și face scroll */
+.hr-modal-body {
+  flex-grow: 1; /* FOARTE IMPORTANT: Umple spațiul rămas */
+  overflow-y: auto; /* Activează scrollul vertical */
+  padding: 24px;
+}
+
+/* Estetică pentru scrollbar (opțional, pentru a arăta mai modern) */
+.hr-modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+.hr-modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.hr-modal-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.hr-modal-body::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Punctul de tragere (Resize Handle) din colț */
+.hr-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  cursor: nwse-resize; /* Cursorul clasic de redimensionare */
+  background: transparent;
+  z-index: 10;
+}
+
+/* Efect vizual opțional în colț pentru a indica că se poate trage */
+.hr-resize-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid #94a3b8;
+  border-bottom: 2px solid #94a3b8;
+  border-radius: 0 0 3px 0;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.hr-resize-handle:hover::after {
+  opacity: 1;
+  border-color: #334155;
+}
+
+/* --- STILURI PENTRU NOILE NODURI (FORȚAT) --- */
+
+/* Nod BIROU */
+.node-office {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+  border: 2px solid #d97706 !important;
+  box-shadow: 0 4px 6px rgba(245, 158, 11, 0.2) !important;
+}
+.node-office * {
+  color: #1e293b !important; /* Forțează textul întunecat */
+  fill: #1e293b !important; /* Pentru iconițele SVG dacă au */
+}
+
+/* Nod COMISIE / CONSILIU */
+.node-committee {
+  background: linear-gradient(135deg, #f472b6, #ec4899) !important;
+  border: 2px solid #db2777 !important;
+  box-shadow: 0 4px 6px rgba(236, 72, 153, 0.2) !important;
+}
+.node-committee * {
+  color: #ffffff !important; /* Forțează textul alb */
+  fill: #ffffff !important; 
+}
+
+.td-group-header {
+  background: #f1f5f9 !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+  font-weight: 800;
+  padding: 12px 15px !important;
+  color: #1e293b;
+  font-size: 0.95rem;
+  text-align: left;
+}
+
 </style>
