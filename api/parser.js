@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     const fullPrompt = `${prompt}\n\nTEXT BRUT:\n${text}`;
 
     // Folosim modelul disponibil pe contul tau: gemini-2.5-flash
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
     
     const apiResponse = await fetch(url, {
       method: 'POST',
