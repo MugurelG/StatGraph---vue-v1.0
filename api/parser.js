@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     const fullPrompt = `${prompt}\n\nTEXT BRUT:\n${text}`;
 
     // Apel direct către API-ul Google (Fără librărie externă)
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+       const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
     
     const apiResponse = await fetch(url, {
       method: 'POST',
