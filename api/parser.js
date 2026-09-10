@@ -1,29 +1,41 @@
 export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Metoda nepermisa' });
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'Cheia API lipseste.' });
+    return res.status(500).json({ error: 'Cheia API lipseste din Vercel.' });
   }
 
   try {
-    // Apel direct pentru a lista toate modelele disponibile pentru cheia ta
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const { prompt, text } = req.body;
+    const fullPrompt = `${prompt}\n\nTEXT BRUT:\n${text}`;
+
+    // Folosim modelul disponibil pe contul tau: gemini-2.5-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     const apiResponse = await fetch(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: fullPrompt }] }]
+      })
     });
 
     const data = await apiResponse.json();
 
     if (!apiResponse.ok) {
-      return res.status(500).json({ error: `Google API Error: ${data.error?.message}` });
+      const errMsg = data.error?.message || 'Eroare necunoscuta de la Google';
+      console.error('Google API Error:', errMsg);
+      return res.status(500).json({ error: `Google API: ${errMsg}` });
     }
 
-    // Returnăm lista de modele direct către frontend (în consolă)
-    const models = data.models.map(m => m.name).join(', ');
-    return res.status(200).json({ result: `MODELE DISPONIBILE: ${models}` });
+    const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return res.status(200).json({ result: aiText });
 
   } catch (error) {
+    console.error('Server Error:', error);
     return res.status(500).json({ error: error.message });
   }
 }

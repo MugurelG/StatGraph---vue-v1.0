@@ -2143,7 +2143,14 @@ const runParserZone1 = async () => {
   aiStatusText.value = `🤖 Întreb AI-ul despre: ${instName}...`;
 
   try {
-    const prompt = `Test`;
+    const prompt = `Ești un asistent administrativ român. Găsește informațiile oficiale pentru instituția: "${instName}". 
+    Returnează RĂSPUNSUL STRICT într-un format JSON valid, fără text adițional, cu următoarele chei:
+    {
+      "cui": "codul fiscal numeric",
+      "acronim": "acronimul oficial de 2-5 litere sau null dacă nu există",
+      "calitate_bugetara": "una dintre opțiunile: Ordonator principal de credite, Ordonator secundar de credite, Ordonator terțiar de credite, Nu se aplică"
+    }`;
+
     const response = await fetch('/api/parser', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2153,8 +2160,14 @@ const runParserZone1 = async () => {
     const data = await response.json();
     if (data.error) throw new Error(data.error);
 
-    // AFIȘĂM RĂSPUNSUL DIRECT ÎNTR-UN ALERT, FĂRĂ JSON.PARSE
-    alert(data.result);
+    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedData = JSON.parse(aiResult);
+
+    if (parsedData.cui) adminFormData.value.cui = parsedData.cui;
+    if (parsedData.acronim) adminFormData.value.acronim = parsedData.acronim;
+    if (parsedData.calitate_bugetara) adminFormData.value.calitate_bugetara = parsedData.calitate_bugetara;
+
+    aiStatusText.value = '✅ Date generale găsite și completate!';
     
   } catch (error) {
     console.error('Eroare Parser Zona 1:', error);
