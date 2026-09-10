@@ -2133,28 +2133,17 @@ const handleDeleteAccount = async () => {
 const showAiInputs = ref(false);
 
 const runParserZone1 = async () => {
-  // 1. Vedem ce nume are instituția curentă din formular
   const instName = adminFormData.value.nume || adminFormData.value.node_name || selectedAdminNode.value?.label;
   if (!instName) {
     alert('Te rog selectează sau creează mai întâi un nod cu un nume.');
     return;
   }
 
-  // 2. Activăm starea de "Se încarcă"
   isAiLoading.value = true;
   aiStatusText.value = `🤖 Întreb AI-ul despre: ${instName}...`;
 
   try {
-    // 3. Construim Prompt-ul (Instrucțiunea pentru AI)
-    const prompt = `Ești un asistent administrativ român. Găsește informațiile oficiale pentru instituția: "${instName}". 
-    Returnează RĂSPUNSUL STRICT într-un format JSON valid, fără text adițional, cu următoarele chei:
-    {
-      "cui": "codul fiscal numeric",
-      "acronim": "acronimul oficial de 2-5 litere sau null dacă nu există",
-      "calitate_bugetara": "una dintre opțiunile: Ordonator principal de credite, Ordonator secundar de credite, Ordonator terțiar de credite, Nu se aplică"
-    }`;
-
-    // 4. Trimitem către backend-ul nostru (/api/parser)
+    const prompt = `Test`;
     const response = await fetch('/api/parser', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2162,23 +2151,14 @@ const runParserZone1 = async () => {
     });
 
     const data = await response.json();
-
     if (data.error) throw new Error(data.error);
 
-    // 5. Curățăm răspunsul (AI-ul mai pune câteodată text ```json în jur)
-    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsedData = JSON.parse(aiResult);
-
-    // 6. INJECTĂM datele în formular!
-    if (parsedData.cui) adminFormData.value.cui = parsedData.cui;
-    if (parsedData.acronim) adminFormData.value.acronim = parsedData.acronim;
-    if (parsedData.calitate_bugetara) adminFormData.value.calitate_bugetara = parsedData.calitate_bugetara;
-
-    aiStatusText.value = '✅ Date generale găsite și completate!';
+    // AFIȘĂM RĂSPUNSUL DIRECT ÎNTR-UN ALERT, FĂRĂ JSON.PARSE
+    alert(data.result);
     
   } catch (error) {
     console.error('Eroare Parser Zona 1:', error);
-    aiStatusText.value = '❌ Eroare: Nu am putut obține datele.';
+    aiStatusText.value = '❌ Eroare: ' + error.message;
   } finally {
     isAiLoading.value = false;
   }
