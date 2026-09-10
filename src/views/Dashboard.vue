@@ -2233,8 +2233,64 @@ const executeZone2 = async () => {
   }
 };
 
-const runParserZone3 = () => {
-  alert('AI ar trebui să importe HR-ul aici (Pasul 4)');
+const runParserZone3 = async () => {
+  const rawText = prompt("Lipește aici (Ctrl+V) textul cu Statul de Funcții (nume angajați și funcții):");
+  
+  if (!rawText || rawText.trim().length < 10) {
+    alert('Nu ai introdus un text valid.');
+    return;
+  }
+
+  isAiLoading.value = true;
+  aiStatusText.value = '🤖 AI numără posturile și construiește tabelul...';
+
+  try {
+    const prompt = `Ești un analist de resurse umane. Din textul brut de mai jos (care conține nume de angajați amestecate cu funcții), extrage și grupează posturile.
+    Reguli:
+    1. Ignoră numele persoanelor fizice și numerele de telefon.
+    2. Numără câte posturi sunt pentru fiecare funcție (ex: 3 Consilieri, 1 Șofer).
+    3. Returnează RĂSPUNSUL STRICT într-un format JSON valid (un array de obiecte), fără text adițional, cu structura:
+    [
+      { "functie": "Consilier", "ocupate": 3, "vacante": 0, "total": 3 },
+      { "functie": "Șofer", "ocupate": 2, "vacante": 1, "total": 3 }
+    ]
+    Dacă nu poți determina posturile vacante din text, pune 0.`;
+
+    const response = await fetch('/api/parser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt, text: rawText })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+
+    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedHrData = JSON.parse(aiResult);
+
+    // Golim tabelul HR curent din formular
+    adminFormData.value.hr_rows = [];
+
+    // Injectăm rândurile primite de la AI în tabelul tău
+    parsedHrData.forEach(row => {
+      adminFormData.value.hr_rows.push({
+        functie: row.functie || 'N/A',
+        ocupate: row.ocupate || 0,
+        vacante: row.vacante || 0,
+        total: row.total || (row.ocupate + row.vacante),
+        statut: row.ocupate > 0 ? 'Activ' : 'Vacant',
+        finColumns: [] // Aici vom pune salariile mai târziu
+      });
+    });
+
+    aiStatusText.value = `✅ Tabel HR completat! Am adăugat ${parsedHrData.length} funcții.`;
+    
+  } catch (error) {
+    console.error('Eroare Parser Zona 3:', error);
+    aiStatusText.value = '❌ Eroare la construirea tabelului: ' + error.message;
+  } finally {
+    isAiLoading.value = false;
+  }
 };
 </script>
 
