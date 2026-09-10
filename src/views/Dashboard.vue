@@ -2181,8 +2181,56 @@ const runParserZone2 = () => {
   showAiInputs.value = true; // Arată căsuța de paste
 };
 
-const executeZone2 = () => {
-  alert('AI ar trebui să citească textul lipit: ' + aiRawTextContact.value);
+const executeZone2 = async () => {
+  if (!aiRawTextContact.value || aiRawTextContact.value.trim().length < 10) {
+    alert('Te rog lipește (Ctrl+V) un text valid în căsuța de mai sus.');
+    return;
+  }
+
+  isAiLoading.value = true;
+  aiStatusText.value = '🤖 AI citește textul și extrage datele...';
+
+  try {
+    // Promptul care spune AI-ului ce să caute în textul tău
+    const prompt = `Ești un asistent administrativ român. Din textul brut de mai jos, extrage informațiile de contact și un rezumat al atribuțiilor (dacă există în text).
+    Returnează RĂSPUNSUL STRICT într-un format JSON valid, fără text adițional, cu următoarele chei:
+    {
+      "adresa": "adresa completă sau null",
+      "telefon": "numerele de telefon sau null",
+      "email": "adresele de email sau null",
+      "website": "site-ul web sau null",
+      "atributii": "un rezumat clar al atribuțiilor sau null"
+    }`;
+
+    const response = await fetch('/api/parser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt, text: aiRawTextContact.value })
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+
+    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedData = JSON.parse(aiResult);
+
+    // Injectăm în formular (verifică dacă numele câmpurilor tale sunt exact astea)
+    if (parsedData.adresa) adminFormData.value.adresa = parsedData.adresa;
+    if (parsedData.telefon) adminFormData.value.telefon = parsedData.telefon;
+    if (parsedData.email) adminFormData.value.email = parsedData.email;
+    if (parsedData.website) adminFormData.value.website = parsedData.website;
+    if (parsedData.atributii) adminFormData.value.rol = parsedData.atributii;
+
+    aiStatusText.value = '✅ Date de contact și atribuții extrase cu succes!';
+    showAiInputs.value = false; // Ascundem căsuța după succes
+    aiRawTextContact.value = ''; // O golim
+    
+  } catch (error) {
+    console.error('Eroare Parser Zona 2:', error);
+    aiStatusText.value = '❌ Eroare la extragere: ' + error.message;
+  } finally {
+    isAiLoading.value = false;
+  }
 };
 
 const runParserZone3 = () => {
