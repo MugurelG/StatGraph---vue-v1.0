@@ -9,7 +9,7 @@ import TreemapChart from '../components/TreemapChart.vue';
 import AuthModal from '../components/auth/AuthModal.vue';
 import html2pdf from 'html2pdf.js';
 import DynamicFinTable from '../components/DynamicFinTable.vue';
-import { Home, Landmark, MapPin, Building, LogOut, Trash2, User, Pencil, Plus, Edit3, Move, Search, BookOpen, Moon, Sun } from 'lucide-vue-next';
+import { Home, Landmark, MapPin, Building, LogOut, Trash2, User, Pencil, Plus, Edit3, Move, Search, BookOpen } from 'lucide-vue-next';
 // ADAUGAT: Inițializăm Router-ul și funcțiile de Autentificare
 const router = useRouter();
 const { user, userRole, logout } = useAuth();
@@ -210,13 +210,6 @@ const showAuthModal = ref(false);
 const authModalMode = ref('login');
 // Admin Tools State
 const showAdminTools = ref(false);
-// --- TEMA (Dark / Light Mode) ---
-const isDarkMode = ref(localStorage.getItem('darkMode') === 'true');
-
-const toggleDarkMode = () => {
-  isDarkMode.value = !isDarkMode.value;
-  localStorage.setItem('darkMode', isDarkMode.value);
-};
 const selectedAdminNode = ref(null);
 const adminPanelPos = ref({ x: 80, y: 100 }); // Poziția inițială a pop-up-ului
 const isDragging = ref(false);
@@ -2126,7 +2119,7 @@ const handleDeleteAccount = async () => {
 
 
 <template>
-  <div class="dashboard-container" :class="{ 'dark-mode': isDarkMode }">
+  <div class="dashboard-container">
     
     <!-- Switcher pentru vizualizări (Graph / Sunburst / Treemap) -->
     <div :class="['chart-switcher-container', { 'is-open': isSwitcherOpen }]">
@@ -2351,11 +2344,6 @@ const handleDeleteAccount = async () => {
       <div class="menu-item" @click="$router.push('/')">
         <Home class="icon" />
         <span class="label">ACASA</span>
-      </div>
-            <div class="menu-item" @click="toggleDarkMode">
-        <Moon v-if="!isDarkMode" class="icon" />
-        <Sun v-else class="icon" />
-        <span class="label">{{ isDarkMode ? 'LIGHT' : 'DARK' }}</span>
       </div>
       <div class="menu-item" @click="activePanel = 'national'; localContext = false;">
         <Landmark class="icon" />
@@ -5731,92 +5719,4 @@ AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
   text-align: left;
 }
 
-/* =========================================
-   DARK MODE (Temă Nocturnă Premium)
-   ========================================= */
-.dashboard-container.dark-mode {
-  background-color: #0f172a;
-  color: #e2e8f0;
-
-  /* Fundal Canvas Graf */
-  .vue-flow, .main-content { background-color: #0f172a !important; }
-
-  /* Meniuri Dreapta & Secundare (Glassmorphism Dark) */
-  .right-menu {
-    background: rgba(15, 23, 42, 0.85);
-    border-left-color: rgba(51, 65, 85, 0.5);
-    .menu-item .icon { stroke: #94a3b8; }
-    .menu-item .label { color: #94a3b8; }
-    .menu-item:hover { background: rgba(51, 65, 85, 0.5); }
-    .menu-item:hover .icon { stroke: #60a5fa; }
-    .menu-item:hover .label { color: #60a5fa; }
-  }
-  .secondary-menu {
-    background: #1e293b;
-    border-left-color: #334155;
-    .panel-title { color: #f1f5f9; }
-  }
-
-  /* Panouri Laterale & Pop-up-uri (Profile, Search, HR, Admin) */
-  .panel-left, .search-side-panel, .admin-tools-panel, .hr-popup-container, .modal-content {
-    background: rgba(30, 41, 59, 0.95) !important; 
-    border-color: #334155 !important;
-    color: #e2e8f0;
-    box-shadow: 0 15px 40px rgba(0,0,0,0.5) !important;
-    h1, h2, h3, .panel-header h3, .hr-popup-title { color: #f1f5f9 !important; }
-  }
-  .admin-panel-header, .hr-modal-header {
-    background: #0f172a !important;
-    border-bottom-color: #334155 !important;
-  }
-
-  /* Carduri din Profil (Metrici, Contact) */
-  .profile-section, .metric-card, .contact-grid .c-value, .relation-box, .c-label {
-    background: #1e293b !important;
-    border-color: #334155 !important;
-    color: #e2e8f0 !important;
-  }
-  .section-title { color: #94a3b8 !important; border-bottom-color: #334155 !important; }
-
-  /* Formulare, Inputuri & Textareas */
-  input, textarea, select, .clean-input, .clean-select {
-    background: #0f172a !important;
-    color: #f1f5f9 !important;
-    border-color: #475569 !important;
-    &::placeholder { color: #64748b !important; }
-    &:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important; }
-    &:disabled { background: #1e293b !important; color: #64748b !important; }
-  }
-
-  /* Tabele (HR, Surse, Membri Comisie) */
-  table.hr-table, table.sources-profile-table, .hr-popup-table, .hr-pdf-table {
-    th { 
-      background: #0f172a !important; 
-      color: #cbd5e1 !important; 
-      border-color: #334155 !important; 
-    }
-    td { 
-      background: #1e293b !important; 
-      color: #e2e8f0 !important; 
-      border-color: #334155 !important; 
-    }
-    tbody tr:nth-child(even) { background-color: #24344d !important; }
-  }
-
-  /* Controale Navigare & Căutare */
-  .nav-controls { background: rgba(30, 41, 59, 0.95) !important; border-color: #334155 !important; }
-  .back-button { background: #334155; color: white; &:hover { background: #475569; } }
-  .depth-indicator { background: #1e293b; color: #e2e8f0; border-color: #334155; }
-  .role-indicator { background: rgba(30, 41, 59, 0.95); color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
-  
-  .search-wrapper.is-open { background: rgba(15, 23, 42, 0.95) !important; border-color: #334155 !important; }
-  .search-dropdown { background: rgba(15, 23, 42, 0.95) !important; border-color: #334155 !important; }
-  .dropdown-item { color: #e2e8f0; &:hover { background: #1e293b; } }
-
-  /* Scrollbar curat pe intunecat */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: #0f172a; }
-  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #475569; }
-}
 </style>
