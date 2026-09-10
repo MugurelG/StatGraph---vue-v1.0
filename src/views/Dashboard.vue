@@ -708,6 +708,13 @@ const adminFormData = ref({
   role_statut: 'Vacant',
 });
 
+// --- VARIABILE PENTRU PARSER AI ---
+const isAiLoading = ref(false);
+const aiStatusText = ref('');
+const aiRawTextContact = ref(''); // Pentru Zona 2 (Contact)
+const aiRawTextRof = ref('');     // Pentru Zona 2 (ROF)
+const aiRawTextHr = ref('');      // Pentru Zona 3 (HR/Salarii)
+
 let finColIdCounter = 0; // Contor pentru ID-uri unice de coloane
 // Tabelul de jos (Date Personal)
 const hrRows = ref([]);
@@ -2121,6 +2128,73 @@ const handleDeleteAccount = async () => {
 
   await handleLogout();
 };
+
+// --- FUNCȚII PARSER AI (Momentan fals, pentru testare UI) ---
+const showAiInputs = ref(false);
+
+const runParserZone1 = async () => {
+  // 1. Vedem ce nume are instituția curentă din formular
+  const instName = adminFormData.value.nume || adminFormData.value.node_name || selectedAdminNode.value?.label;
+  if (!instName) {
+    alert('Te rog selectează sau creează mai întâi un nod cu un nume.');
+    return;
+  }
+
+  // 2. Activăm starea de "Se încarcă"
+  isAiLoading.value = true;
+  aiStatusText.value = `🤖 Întreb AI-ul despre: ${instName}...`;
+
+  try {
+    // 3. Construim Prompt-ul (Instrucțiunea pentru AI)
+    const prompt = `Ești un asistent administrativ român. Găsește informațiile oficiale pentru instituția: "${instName}". 
+    Returnează RĂSPUNSUL STRICT într-un format JSON valid, fără text adițional, cu următoarele chei:
+    {
+      "cui": "codul fiscal numeric",
+      "acronim": "acronimul oficial de 2-5 litere sau null dacă nu există",
+      "calitate_bugetara": "una dintre opțiunile: Ordonator principal de credite, Ordonator secundar de credite, Ordonator terțiar de credite, Nu se aplică"
+    }`;
+
+    // 4. Trimitem către backend-ul nostru (/api/parser)
+    const response = await fetch('/api/parser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt, text: '' })
+    });
+
+    const data = await response.json();
+
+    if (data.error) throw new Error(data.error);
+
+    // 5. Curățăm răspunsul (AI-ul mai pune câteodată text ```json în jur)
+    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedData = JSON.parse(aiResult);
+
+    // 6. INJECTĂM datele în formular!
+    if (parsedData.cui) adminFormData.value.cui = parsedData.cui;
+    if (parsedData.acronim) adminFormData.value.acronim = parsedData.acronim;
+    if (parsedData.calitate_bugetara) adminFormData.value.calitate_bugetara = parsedData.calitate_bugetara;
+
+    aiStatusText.value = '✅ Date generale găsite și completate!';
+    
+  } catch (error) {
+    console.error('Eroare Parser Zona 1:', error);
+    aiStatusText.value = '❌ Eroare: Nu am putut obține datele.';
+  } finally {
+    isAiLoading.value = false;
+  }
+};
+
+const runParserZone2 = () => {
+  showAiInputs.value = true; // Arată căsuța de paste
+};
+
+const executeZone2 = () => {
+  alert('AI ar trebui să citească textul lipit: ' + aiRawTextContact.value);
+};
+
+const runParserZone3 = () => {
+  alert('AI ar trebui să importe HR-ul aici (Pasul 4)');
+};
 </script>
 
 
@@ -2452,6 +2526,49 @@ const handleDeleteAccount = async () => {
       </div>
  <div v-if="adminAction === 'create' || adminAction === 'edit'" class="new-admin-form">
 
+ <!-- === PANOU ASISTENT PARSER AI === -->
+      <div class="ai-parser-panel" style="background: rgba(139, 92, 246, 0.1); border: 1px solid #8b5cf6; border-radius: 12px; padding: 20px; margin-bottom: 25px;">
+        <h3 style="color: #a78bfa; font-size: 1.1rem; margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
+          🤖 Asistent Parser AI
+        </h3>
+        
+        <div v-if="isAiLoading" style="background: #0f172a; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-family: monospace; font-size: 0.85rem; color: #16a34a;">
+          {{ aiStatusText || 'AI procesează...' }}
+        </div>
+
+        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+          
+          <!-- ZONA 1 -->
+          <button @click="runParserZone1" style="flex: 1; min-width: 200px; background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">
+            🔎 Zona 1: Date Generale<br>
+            <small style="opacity: 0.8; font-weight: normal;">CUI, Acronim, Ordonator</small>
+          </button>
+
+          <!-- ZONA 2 -->
+          <button @click="runParserZone2" style="flex: 1; min-width: 200px; background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">
+            📂 Zona 2: Documente & Contact<br>
+            <small style="opacity: 0.8; font-weight: normal;">ROF, Adresa, Atribuții</small>
+          </button>
+
+          <!-- ZONA 3 -->
+          <button @click="runParserZone3" style="flex: 1; min-width: 200px; background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">
+            📊 Zona 3: Tabel HR & Venituri<br>
+            <small style="opacity: 0.8; font-weight: normal;">Stat Funcții, Salarii</small>
+          </button>
+
+        </div>
+
+        <!-- CĂSUȚE ASCUNSE PENTRU TEXT BRUT -->
+        <div v-if="showAiInputs" style="margin-top: 20px; display: flex; flex-direction: column; gap: 15px;">
+          <div>
+            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Lipește aici textul pentru Contact / ROF / Membri:</label>
+            <textarea v-model="aiRawTextContact" rows="4" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px;" placeholder="Ctrl+V aici..."></textarea>
+          </div>
+          <button @click="executeZone2" style="background: #3b82f6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: 700;">Extrage din Text</button>
+        </div>
+
+      </div>
+      <!-- === SFÂRȘIT PANOU PARSER AI === -->
 
             <!-- SELECTOR TIP NOD (Comun pentru toate formularele) -->
         <div class="relation-admin-section" style="margin-bottom: 0; padding-bottom: 10px;">
