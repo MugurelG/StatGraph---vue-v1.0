@@ -2247,19 +2247,19 @@ const executeZone3 = async () => {
   }
 
   isAiLoading.value = true;
-  aiStatusText.value = '🤖 AI numără posturile și construiește tabelul...';
+  aiStatusText.value = '🤖 AI numără posturile și extrage salariile...';
 
   try {
-    const prompt = `Ești un analist de resurse umane. Din textul brut de mai jos (care conține nume de angajați amestecate cu funcții), extrage și grupează posturile.
+    const prompt = `Ești un analist de resurse umane. Din textul brut de mai jos, extrage și grupează posturile și salariile.
     Reguli:
     1. Ignoră numele persoanelor fizice și numerele de telefon.
-    2. Numără câte posturi sunt pentru fiecare funcție (ex: 3 Consilieri, 1 Șofer).
-    3. Returnează RĂSPUNSUL STRICT într-un format JSON valid (un array de obiecte), fără text adițional, cu structura:
+    2. Numără câte posturi sunt pentru fiecare funcție (ex: 3 Consilieri).
+    3. Identifică salariul de bază (sau venitul principal) pentru fiecare funcție. Este o sumă în lei (ex: 24610).
+    4. Returnează RĂSPUNSUL STRICT într-un format JSON valid (un array de obiecte), fără text adițional, cu structura:
     [
-      { "functie": "Consilier", "ocupate": 3, "vacante": 0, "total": 3 },
-      { "functie": "Șofer", "ocupate": 2, "vacante": 1, "total": 3 }
+      { "functie": "Consilier", "ocupate": 3, "vacante": 0, "total": 3, "salariu_baza": 5000 }
     ]
-    Dacă nu poți determina posturile vacante din text, pune 0.`;
+    Dacă nu poți determina posturile vacante, pune 0. Dacă nu găsești salariul pentru o funcție, pune null.`;
 
     const response = await fetch('/api/parser', {
       method: 'POST',
@@ -2276,22 +2276,33 @@ const executeZone3 = async () => {
 
     const parsedHrData = JSON.parse(aiResult);
 
-    // Folosim variabila corectă: hrRows
     hrRows.value.splice(0); // Golim tabelul
 
     // Injectăm rândurile primite de la AI
     parsedHrData.forEach(row => {
+      let dynamicCols = [];
+      
+      // Dacă AI-ul a găsit salariul, îl adăugăm ca și coloană dinamică (efectul butonului +Venit)
+      if (row.salariu_baza) {
+        dynamicCols.push({
+          id: 'fin_' + (++finColIdCounter), // Folosim contorul tău de ID-uri
+          name: 'Salariu de bază',
+          type: 'valoare',
+          value: row.salariu_baza
+        });
+      }
+
       hrRows.value.push({
         functie: row.functie || 'N/A',
         ocupate: row.ocupate || 0,
         vacante: row.vacante || 0,
         total: row.total || (row.ocupate + row.vacante),
         statut: row.ocupate > 0 ? 'Activ' : 'Vacant',
-        finColumns: []
+        finColumns: dynamicCols // Aici băgăm salariul găsit de AI
       });
     });
 
-    aiStatusText.value = `✅ Tabel HR completat! Am adăugat ${parsedHrData.length} funcții.`;
+    aiStatusText.value = `✅ Tabel HR completat cu salarii! Am adăugat ${parsedHrData.length} funcții.`;
     showAiHrInputs.value = false; 
     aiRawTextHr.value = ''; 
     
