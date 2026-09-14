@@ -492,6 +492,18 @@ const closeProfilePanel = () => {
   userHrData.value = [];
 };
 
+// Funcție care numără corect rândurile, sărind peste headere
+const getDisplayHrRows = computed(() => {
+  let counter = 0;
+  return userHrData.value.map(row => {
+    if (!row.isHeader) {
+      counter++;
+      return { ...row, displayIndex: counter }; // Adăugăm numărul corect
+    }
+    return row; // Header-ul rămâne fără număr
+  });
+});
+
 const closeRolePanel = () => {
   showRolePanel.value = false;
   selectedRoleData.value = null;
@@ -3698,10 +3710,11 @@ const executeZone3 = async () => {
           <th>Statut</th>
         </tr>
       </thead>
-    <tbody>
-        <template v-for="(row, index) in userHrData" :key="'hr-popup-'+index">
+          <tbody>
+        <!-- Folosim noua funcție getDisplayHrRows în loc de userHrData -->
+        <template v-for="(row, index) in getDisplayHrRows" :key="'hr-popup-'+index">
           
-          <!-- RÂND HEADER (Aici afișăm Numele Departamentului / Rolului) -->
+          <!-- RÂND HEADER -->
           <tr v-if="row.isHeader" class="td-group-header">
             <td colspan="6" style="background: #f1f5f9; font-weight: 800; text-align: left; padding: 12px 8px; border-bottom: 2px solid #cbd5e1; color: #1e293b;">
               🏛️ {{ row.title }}
@@ -3710,14 +3723,15 @@ const executeZone3 = async () => {
 
           <!-- RÂND NORMAL (Posturile HR) -->
           <tr v-else>
-            <!-- AICI ESTE MAGIA: Numărăm doar rândurile de dinainte care NU sunt header -->
-            <td style="text-align: center;">{{ userHrData.filter((r, i) => !r.isHeader && i < index).length + 1 }}</td>
+            <!-- Aici folosim row.displayIndex generat de JS -->
+            <td style="text-align: center;">{{ row.displayIndex }}</td>
             <td>{{ row.functie || '-' }}</td>
             <td style="text-align: center;">{{ row.ocupate || 0 }}</td>
             <td style="text-align: center;">{{ row.vacante || 0 }}</td>
             <td style="text-align: center;">{{ (row.ocupate || 0) + (row.vacante || 0) }}</td>
             <td style="text-align: center;">{{ row.statut || '-' }}</td>
           </tr>
+
         </template>
       </tbody>
 
