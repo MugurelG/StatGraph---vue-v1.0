@@ -3698,7 +3698,7 @@ const executeZone3 = async () => {
           <th>Statut</th>
         </tr>
       </thead>
-      <tbody>
+    <tbody>
         <template v-for="(row, index) in userHrData" :key="'hr-popup-'+index">
           
           <!-- RÂND HEADER (Aici afișăm Numele Departamentului / Rolului) -->
@@ -3710,16 +3710,18 @@ const executeZone3 = async () => {
 
           <!-- RÂND NORMAL (Posturile HR) -->
           <tr v-else>
-            <td style="text-align: center;">{{ index + 1 }}</td>
+            <!-- AICI ESTE MAGIA: Numărăm doar rândurile de dinainte care NU sunt header -->
+            <td style="text-align: center;">{{ userHrData.filter((r, i) => !r.isHeader && i < index).length + 1 }}</td>
             <td>{{ row.functie || '-' }}</td>
             <td style="text-align: center;">{{ row.ocupate || 0 }}</td>
             <td style="text-align: center;">{{ row.vacante || 0 }}</td>
             <td style="text-align: center;">{{ (row.ocupate || 0) + (row.vacante || 0) }}</td>
             <td style="text-align: center;">{{ row.statut || '-' }}</td>
           </tr>
-
         </template>
       </tbody>
+
+
     </table>
 
   </div> <!-- AICI SE ÎNCHIDE ZONA DE SCROLL -->
