@@ -2250,16 +2250,17 @@ const executeZone3 = async () => {
   aiStatusText.value = '🤖 AI numără posturile și extrage salariile...';
 
   try {
-        const prompt = `Ești un analist de resurse umane financiar. Din textul brut de mai jos, extrage posturile și salariile.
+    const prompt = `Ești un analist de resurse umane. Din textul brut de mai jos, extrage posturile și salariile.
+    Structura textului: Pe un rând este funcția, pe rândurile următoare este categoria (demnitar, funcție publică) și apoi un număr reprezentând salariul în lei (ex: 24.610 sau 16478).
     Reguli:
-    1. Ignoră numele persoanelor fizice, numerele de telefon și cuvintele de genul "demnitar", "funcție publică", "personal contractual".
-    2. Numără câte posturi sunt pentru fiecare funcție. Dacă nu se specifică un număr, înseamnă că este 1 singur post.
-    3. URMĂREȘTE TEXTUL CU ATENȚIE: Sub sau lângă denumirea fiecărei funcții există o sumă de bani (salariul de bază în lei, ex: 24.610 sau 16478). Trebuie SĂ O GĂSEȘTI și să o asociezi cu funcția respectivă. Curăță suma de puncte sau virgule (ex: "24.610" devine 24610).
-    4. Returnează RĂSPUNSUL STRICT într-un format JSON valid (un array de obiecte), fără text adițional, cu structura:
+    1. Ignoră cuvintele "demnitar", "funcție publică", etc.
+    2. Numără posturile (dacă nu se specifică, pune 1).
+    3. Pentru fiecare funcție, găsește numărul care reprezintă salariul (dacă sunt mai multe sume, alege-o pe prima). Curăță numărul de puncte sau virgule (ex: "24.610" devine 24610).
+    4. Returnează RĂSPUNSUL STRICT într-un format JSON valid (array), fără text adițional:
     [
       { "functie": "Viceprim-ministru", "ocupate": 1, "vacante": 0, "total": 1, "salariu_baza": 24610 }
     ]
-    Nu ai voie să lași câmpul "salariu_baza" gol. Caută suma în text!`;
+    Nu ai voie să lași cheia "salariu_baza" goală. Dacă nu găsești salariul, pune 0.`;
 
     const response = await fetch('/api/parser', {
       method: 'POST',
@@ -2279,17 +2280,22 @@ const executeZone3 = async () => {
     hrRows.value.splice(0); // Golim tabelul
 
     // Injectăm rândurile primite de la AI
-    parsedHrData.forEach(row => {
+    parsedHrData.forEach((row, index) => {
       let dynamicCols = [];
       
-      // Dacă AI-ul a găsit salariul, îl adăugăm ca și coloană dinamică (efectul butonului +Venit)
-      if (row.salariu_baza) {
-        dynamicCols.push({
-          id: 'fin_' + (++finColIdCounter), // Folosim contorul tău de ID-uri
-          name: 'Salariu de bază',
-          type: 'valoare',
-          value: row.salariu_baza
-        });
+      if (row.salariu_baza !== null && row.salariu_baza !== undefined) {
+        // Curățăm salariul de eventuale puncte sau text (ex: "24.610" -> 24610)
+        let cleanSalary = String(row.salariu_baza).replace(/[^0-9]/g, '');
+        
+        if (cleanSalary) {
+          dynamicCols.push({
+            // Generăm un ID unic sigur, fără să depindem de contorul global
+            id: 'fin_ai_' + Date.now() + '_' + index, 
+            name: 'Salariu minim - brut',
+            type: 'valoare',
+            value: parseFloat(cleanSalary)
+          });
+        }
       }
 
       hrRows.value.push({
@@ -2298,7 +2304,7 @@ const executeZone3 = async () => {
         vacante: row.vacante || 0,
         total: row.total || (row.ocupate + row.vacante),
         statut: row.ocupate > 0 ? 'Activ' : 'Vacant',
-        finColumns: dynamicCols // Aici băgăm salariul găsit de AI
+        finColumns: dynamicCols // Aici bagă coloana cu salariul
       });
     });
 
