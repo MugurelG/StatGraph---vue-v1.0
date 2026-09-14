@@ -2250,16 +2250,16 @@ const executeZone3 = async () => {
   aiStatusText.value = '🤖 AI numără posturile și extrage salariile...';
 
   try {
-    const prompt = `Ești un analist de resurse umane. Din textul brut de mai jos, extrage și grupează posturile și salariile.
+        const prompt = `Ești un analist de resurse umane financiar. Din textul brut de mai jos, extrage posturile și salariile.
     Reguli:
-    1. Ignoră numele persoanelor fizice și numerele de telefon.
-    2. Numără câte posturi sunt pentru fiecare funcție (ex: 3 Consilieri).
-    3. Identifică salariul de bază (sau venitul principal) pentru fiecare funcție. Este o sumă în lei (ex: 24610).
+    1. Ignoră numele persoanelor fizice, numerele de telefon și cuvintele de genul "demnitar", "funcție publică", "personal contractual".
+    2. Numără câte posturi sunt pentru fiecare funcție. Dacă nu se specifică un număr, înseamnă că este 1 singur post.
+    3. URMĂREȘTE TEXTUL CU ATENȚIE: Sub sau lângă denumirea fiecărei funcții există o sumă de bani (salariul de bază în lei, ex: 24.610 sau 16478). Trebuie SĂ O GĂSEȘTI și să o asociezi cu funcția respectivă. Curăță suma de puncte sau virgule (ex: "24.610" devine 24610).
     4. Returnează RĂSPUNSUL STRICT într-un format JSON valid (un array de obiecte), fără text adițional, cu structura:
     [
-      { "functie": "Consilier", "ocupate": 3, "vacante": 0, "total": 3, "salariu_baza": 5000 }
+      { "functie": "Viceprim-ministru", "ocupate": 1, "vacante": 0, "total": 1, "salariu_baza": 24610 }
     ]
-    Dacă nu poți determina posturile vacante, pune 0. Dacă nu găsești salariul pentru o funcție, pune null.`;
+    Nu ai voie să lași câmpul "salariu_baza" gol. Caută suma în text!`;
 
     const response = await fetch('/api/parser', {
       method: 'POST',
