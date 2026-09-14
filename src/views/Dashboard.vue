@@ -2131,7 +2131,7 @@ const handleDeleteAccount = async () => {
 
 // --- FUNCȚII PARSER AI (Momentan fals, pentru testare UI) ---
 const showAiInputs = ref(false);
-
+const showAiHrInputs = ref(false);
 const runParserZone1 = async () => {
   const instName = adminFormData.value.nume || adminFormData.value.node_name || selectedAdminNode.value?.label;
   if (!instName) {
@@ -2177,9 +2177,6 @@ const runParserZone1 = async () => {
   }
 };
 
-const runParserZone2 = () => {
-  showAiInputs.value = true; // Arată căsuța de paste
-};
 
 const executeZone2 = async () => {
   if (!aiRawTextContact.value || aiRawTextContact.value.trim().length < 10) {
@@ -2233,11 +2230,19 @@ const executeZone2 = async () => {
   }
 };
 
-const runParserZone3 = async () => {
-  const rawText = prompt("Lipește aici (Ctrl+V) textul cu Statul de Funcții (nume angajați și funcții):");
-  
-  if (!rawText || rawText.trim().length < 10) {
-    alert('Nu ai introdus un text valid.');
+const runParserZone2 = () => {
+  showAiInputs.value = !showAiInputs.value; // Deschide/Închide căsuța de Contact
+  showAiHrInputs.value = false; // Asigură că cealaltă e închisă
+};
+
+const runParserZone3 = () => {
+  showAiHrInputs.value = !showAiHrInputs.value; // Deschide/Închide căsuța HR
+  showAiInputs.value = false; // Asigură că cealaltă e închisă
+};
+
+const executeZone3 = async () => {
+  if (!aiRawTextHr.value || aiRawTextHr.value.trim().length < 10) {
+    alert('Te rog lipește un text valid în căsuța pentru HR.');
     return;
   }
 
@@ -2259,31 +2264,36 @@ const runParserZone3 = async () => {
     const response = await fetch('/api/parser', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompt, text: rawText })
+      body: JSON.stringify({ prompt: prompt, text: aiRawTextHr.value })
     });
 
     const data = await response.json();
     if (data.error) throw new Error(data.error);
 
     let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    console.log("Răspuns brute AI pt HR:", aiResult);
+
     const parsedHrData = JSON.parse(aiResult);
 
-    // Golim tabelul HR curent din formular
-    adminFormData.value.hr_rows = [];
+    // Folosim variabila corectă: hrRows
+    hrRows.value.splice(0); // Golim tabelul
 
-    // Injectăm rândurile primite de la AI în tabelul tău
+    // Injectăm rândurile primite de la AI
     parsedHrData.forEach(row => {
-      adminFormData.value.hr_rows.push({
+      hrRows.value.push({
         functie: row.functie || 'N/A',
         ocupate: row.ocupate || 0,
         vacante: row.vacante || 0,
         total: row.total || (row.ocupate + row.vacante),
         statut: row.ocupate > 0 ? 'Activ' : 'Vacant',
-        finColumns: [] // Aici vom pune salariile mai târziu
+        finColumns: []
       });
     });
 
     aiStatusText.value = `✅ Tabel HR completat! Am adăugat ${parsedHrData.length} funcții.`;
+    showAiHrInputs.value = false; 
+    aiRawTextHr.value = ''; 
     
   } catch (error) {
     console.error('Eroare Parser Zona 3:', error);
@@ -2655,15 +2665,22 @@ const runParserZone3 = async () => {
 
         </div>
 
-        <!-- CĂSUȚE ASCUNSE PENTRU TEXT BRUT -->
-        <div v-if="showAiInputs" style="margin-top: 20px; display: flex; flex-direction: column; gap: 15px;">
-          <div>
-            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Lipește aici textul pentru Contact / ROF / Membri:</label>
-            <textarea v-model="aiRawTextContact" rows="4" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px;" placeholder="Ctrl+V aici..."></textarea>
-          </div>
-          <button @click="executeZone2" style="background: #3b82f6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: 700;">Extrage din Text</button>
-        </div>
+                 <!-- CĂSUȚE ASCUNSE PENTRU TEXT BRUT -->
+            <div v-if="showAiInputs" style="margin-top: 20px; display: flex; flex-direction: column; gap: 15px;">
+              <div>
+                <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Lipește aici textul pentru Contact / ROF / Membri:</label>
+                <textarea v-model="aiRawTextContact" rows="4" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px;" placeholder="Ctrl+V aici..."></textarea>
+              </div>
+              <button @click="executeZone2" style="background: #3b82f6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: 700;">Extrage Date Contact/ROF</button>
+            </div>
 
+            <div v-if="showAiHrInputs" style="margin-top: 20px; display: flex; flex-direction: column; gap: 15px;">
+              <div>
+                <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Lipește aici textul pentru Statul de Funcții (HR):</label>
+                <textarea v-model="aiRawTextHr" rows="6" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px;" placeholder="Copiază aici lista de angajați sau tabelul din PDF..."></textarea>
+              </div>
+              <button @click="executeZone3" style="background: #16a34a; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: 700;">Construiește Tabel HR</button>
+            </div>
       </div>
       <!-- === SFÂRȘIT PANOU PARSER AI === -->
 
