@@ -1290,6 +1290,42 @@ const goBack = () => {
   }
 };
 
+
+// --- BREADCRUMBS (Firimituri de navigare) ---
+const breadcrumbTrail = computed(() => {
+  const trail = [];
+  let currentId = currentRootId.value;
+  
+  // Urcăm în arbore prin parent_id până ajungem la null (rădăcina absolută)
+  while (currentId) {
+    const node = allNodesList.value.find(n => String(n.id) === String(currentId));
+    if (!node) break;
+    
+    trail.unshift(node); // Adăugăm la începutul array-ului ca să meargă Rădăcină -> Copil
+    
+    // Oprim bucla dacă nu are părinte
+    if (!node.parent_id) break;
+    currentId = String(node.parent_id);
+  }
+  return trail;
+});
+
+const navigateToBreadcrumb = (nodeId) => {
+  // Dacă dăm click pe nodul curent, nu facem nimic
+  if (String(nodeId) === String(currentRootId.value)) return;
+
+  // Calculăm noul stack de navigare
+  const trail = breadcrumbTrail.value;
+  const clickedIndex = trail.findIndex(n => String(n.id) === String(nodeId));
+  
+  // Păstrăm în stack doar nodurile de dinaintea celui pe care am click-uit
+  navigationStack.value = trail.slice(0, clickedIndex).map(n => String(n.id));
+  
+  // Setăm noul nod rădăcină
+  currentRootId.value = String(nodeId);
+};
+
+
 // --- LOGICA ADMIN TOOLS ---
 const toggleAdminTools = () => {
   showAdminTools.value = !showAdminTools.value;
@@ -2420,25 +2456,37 @@ const executeZone3 = async () => {
               Mod: <span>{{ userRole === 'admin' ? 'administrator' : userRole }}</span>
             </div>
 
-            <!-- Controale de Navigare (Înapoi, Nivel, Coloane) -->
-                   <div v-if="userRole !== 'vizitator'" class="nav-controls">
-          <template v-if="navigationStack.length > 0">
-            <button @click="goBack" class="back-button">
-              ⬅ Înapoi
-            </button>
-        
-            <div class="depth-indicator">
-              Nivel: {{ navigationStack.length }}
-            </div>
+          <!-- Controale de Navigare (Înapoi, Nivel, Coloane) -->
+    <div v-if="userRole !== 'vizitator'" class="nav-controls">
+      <template v-if="navigationStack.length > 0">
+        <button @click="goBack" class="back-button">
+          ⬅ Înapoi
+        </button>
+    
+        <!-- NOU: BREADCRUMBS -->
+        <div class="breadcrumbs-container">
+          <template v-for="(node, index) in breadcrumbTrail" :key="'crumb-'+node.id">
+            <span 
+              @click="navigateToBreadcrumb(node.id)" 
+              class="breadcrumb-item" 
+              :class="{ 'is-active': index === breadcrumbTrail.length - 1 }"
+            >
+              {{ node.nume || node.node_name }}
+            </span>
+            <span v-if="index < breadcrumbTrail.length - 1" class="breadcrumb-separator">
+              ➔
+            </span>
           </template>
-
-          <div class="layout-selector">
-            <label for="col-select">Organizează noduri:</label>
-            <select id="col-select" v-model="columnCount" @change="updateLayout">
-              <option v-for="n in [2, 3, 4, 5, 6, 7]" :key="n" :value="n">{{ n }} coloane</option>
-            </select>
-          </div>
         </div>
+      </template>
+
+      <div class="layout-selector">
+        <label for="col-select">Organizează noduri:</label>
+        <select id="col-select" v-model="columnCount" @change="updateLayout">
+          <option v-for="n in [2, 3, 4, 5, 6, 7]" :key="n" :value="n">{{ n }} coloane</option>
+        </select>
+      </div>
+    </div>
         
         <!-- VueFlow (Organigrama Principală) -->
         <VueFlow 
@@ -6083,4 +6131,44 @@ AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
   ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: #475569; }
 }
+
+/* BREADCRUMBS - Bara de navigare ierarhică */
+.breadcrumbs-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 600px;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 0 10px;
+}
+
+.breadcrumb-item {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #2563eb;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.breadcrumb-item:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.breadcrumb-item.is-active {
+  color: #1e293b; /* Culoare închisă pentru nodul curent */
+  cursor: default;
+  pointer-events: none;
+  font-weight: 700;
+}
+
+.breadcrumb-separator {
+  color: #94a3b8;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
 </style>
