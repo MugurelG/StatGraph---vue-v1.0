@@ -1,0 +1,254 @@
+.vue-flow__node-default {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+/* 2. Containerul tău vizual (Cutia interioară) - Setări de bază */
+.custom-node-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 8px 25px;
+  box-sizing: border-box;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  text-align: center;
+  border: 2px solid transparent;
+  overflow: visible !important; 
+  cursor: pointer;
+  background-color: white;
+  border-radius: 12px;
+  opacity: 0; /* Start invizibil */
+  animation: nodeCascade 0.4s ease-out forwards; /* Animație care se termină vizibil */
+  &:hover {
+    transform: translateY(-4px) scale(1.03);
+  }
+}
+
+/* Textul */
+.node-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: white;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  pointer-events: none;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.3); 
+}
+
+/* Insigna */
+.subordinate-badge {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  background: linear-gradient(145deg, #8b5cf6, #6d28d9); 
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+  border: 2px solid rgba(255,255,255,0.6);
+  z-index: 10;
+}
+
+.lock-indicator {
+  position: absolute;
+  bottom: -20px;
+  font-size: 9px;
+  color: #333;
+  font-weight: 700;
+  white-space: nowrap;
+  background: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.details-badge {
+  position: absolute;
+  bottom: -12px;
+  left: -12px; // În stânga-jos
+  background: linear-gradient(145deg, #22c55e, #16a34a); // Verde
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+  border: 2px solid rgba(255,255,255,0.6);
+  z-index: 10;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.details-badge:hover {
+  transform: scale(1.2);
+}
+
+
+/* Miniatura foto în nod */
+.node-thumbnail {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2.5px solid rgba(255, 255, 255, 0.7);
+  position: absolute;
+  top: -19px;
+  left: -19px;
+  background: #f1f5f9;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  z-index: 5;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+.node-thumbnail:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+}
+
+/* ==========================================
+ESTETICA SPECIFICĂ (3D, Oval, Culori)
+AICI ESTE FIX-UL: Selectorul cu spațiu (.wrapper .interior)
+========================================== */
+
+.node-national .custom-node-container {
+  background: linear-gradient(145deg, #ef4444, #b91c1c) !important;
+  border-radius: 50px !important; /* OVAL */
+  border-color: #991b1b !important;
+  box-shadow: 
+    8px 8px 16px rgba(0, 0, 0, 0.5),   
+    -4px -4px 10px rgba(255, 255, 255, 0.15), 
+    inset -3px -3px 8px rgba(0, 0, 0, 0.3),  
+    inset 3px 3px 8px rgba(255, 150, 150, 0.3) !important; 
+}
+
+.node-judet .custom-node-container {
+  background: linear-gradient(145deg, #f59e0b, #d97706) !important;
+  border-radius: 16px !important; 
+  border-color: #b45309 !important;
+  box-shadow: 
+    8px 8px 16px rgba(0, 0, 0, 0.4), 
+    -4px -4px 10px rgba(255, 255, 255, 0.15),
+    inset -3px -3px 8px rgba(0, 0, 0, 0.2), 
+    inset 3px 3px 8px rgba(255, 220, 100, 0.4) !important;
+  .node-label { color: #422006 !important; text-shadow: none !important; }
+}
+
+.node-local .custom-node-container {
+  background: linear-gradient(145deg, #3b82f6, #1d4ed8) !important;
+  border-radius: 16px !important; 
+  border-color: #1e40af !important;
+  box-shadow: 
+    8px 8px 16px rgba(0, 0, 0, 0.5), 
+    -4px -4px 10px rgba(255, 255, 255, 0.15),
+    inset -3px -3px 8px rgba(0, 0, 0, 0.3), 
+    inset 3px 3px 8px rgba(100, 160, 255, 0.3) !important;
+}
+
+.node-role .custom-node-container {
+  background: linear-gradient(145deg, #fef9e7, #fdf1b8) !important;
+  border-radius: 25px !important;
+  border-color: #f5d060 !important;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.15), 
+    -2px -2px 6px rgba(255, 255, 255, 0.5), 
+    inset -2px -2px 4px rgba(0, 0, 0, 0.05),  
+    inset 2px 2px 4px rgba(255, 255, 255, 0.7) !important; 
+  
+  .node-label { 
+    color: #FF3F34 !important; 
+    text-shadow: none !important; 
+    font-size: 0.8rem !important; 
+  }
+}
+
+.node-department .custom-node-container {
+  background: linear-gradient(145deg, #8A00C4, #8A00C4) !important;
+  border-radius: 25px !important;
+  border-color: #5A0078 !important;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.15), 
+    -2px -2px 6px rgba(255, 255, 255, 0.5), 
+    inset -2px -2px 4px rgba(0, 0, 0, 0.05),  
+    inset 2px 2px 4px rgba(255, 255, 255, 0.7) !important; 
+
+  .node-label { 
+    color: #3AC400 !important; 
+    text-shadow: none !important; 
+    font-size: 0.8rem !important; 
+  }
+}
+
+.node-office .custom-node-container {
+  background: linear-gradient(145deg, #008000, #006600) !important;
+  border-radius: 25px !important;
+  border-color: #004d00 !important;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.15), 
+    -2px -2px 6px rgba(255, 255, 255, 0.5), 
+    inset -2px -2px 4px rgba(0, 0, 0, 0.05),  
+    inset 2px 2px 4px rgba(255, 255, 255, 0.7) !important; 
+
+  .node-label { 
+    color: #ffffff !important; 
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.3) !important; 
+    font-size: 0.8rem !important; 
+  }
+}
+
+.node-committee .custom-node-container {
+  background: linear-gradient(145deg, #7FFFD4, #66DDAA) !important;
+  border-radius: 25px !important;
+  border-color: #4DCC99 !important;
+  box-shadow: 
+    4px 4px 8px rgba(0, 0, 0, 0.15), 
+    -2px -2px 6px rgba(255, 255, 255, 0.5), 
+    inset -2px -2px 4px rgba(0, 0, 0, 0.05),  
+    inset 2px 2px 4px rgba(255, 255, 255, 0.7) !important; 
+
+  .node-label { 
+    color: #004d40 !important; /* Text închis pentru contrast maxim */
+    text-shadow: none !important; 
+    font-size: 0.8rem !important; 
+  }
+}
+/* ANIMAȚIE CASCADĂ NOUĂ */
+@keyframes nodeCascade {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+   /* Efect vizual pentru Nodul Selectat de Admin */
+    .is-selected .custom-node-container {
+      outline: 3px solid #facc15 !important; /* Contur galben strălucitor */
+      outline-offset: 4px;
+      filter: brightness(1.1); /* Îl face puțin mai luminos */
+      transition: all 0.2s ease;
+    }
