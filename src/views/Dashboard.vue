@@ -2178,6 +2178,27 @@ const handleDeleteAccount = async () => {
   await handleLogout();
 };
 
+// Funcție ajutătoare care comunică cu serverul și prinde erorile de timeout
+const callRobot = async (url, type, nodeName) => {
+  const res = await fetch('/api/robot', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, type, nodeName })
+  });
+  
+  // Dacă Vercel dă eroare 500/502 (A server error...), prindem eroarea aici
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Serverul nu a putut procesa linkul (Posibil Timeout). Cod: ${res.status}`);
+  }
+  
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  
+  // Curățăm și returnăm JSON-ul de la AI
+  return JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
+};
+
 const runDataRobot = async () => {
   if (!robotUrlContact.value && !robotUrlRof.value && !robotUrlHr.value && !robotUrlSalarii.value) {
     alert('Te rog introdu cel puțin un link pentru ca Robotul să poată lucra.');
@@ -2186,100 +2207,81 @@ const runDataRobot = async () => {
 
   isAiLoading.value = true;
   const nodeName = adminFormData.value.nume || adminFormData.value.node_name || selectedAdminNode.value?.label;
+  let errorsFound = []; // Aici strângem erorile ca să le afișăm la final, dar nu oprim robotul
 
   try {
     // 1. Procesăm Linkul de Contact
     if (robotUrlContact.value) {
       aiStatusText.value = '🤖 [1/4] Citesc datele de contact...';
-      const res = await fetch('/api/robot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: robotUrlContact.value, type: 'contact' })
-      });
-      const data = await res.json();
-      if (data.error) throw new Error("Eroare la Link 1 (Contact): " + data.error); // AFIȘĂM EROAREA
-      
-      const parsed = JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
-      if (parsed.cui) adminFormData.value.cui = parsed.cui;
-      if (parsed.adresa) adminFormData.value.adresa = parsed.adresa;
-      if (parsed.telefon) adminFormData.value.telefon = parsed.telefon;
-      if (parsed.email) adminFormData.value.email = parsed.email;
-      if (parsed.website) adminFormData.value.website = parsed.website;
+      try {
+        const parsed = await callRobot(robotUrlContact.value, 'contact', nodeName);
+        if (parsed.cui) adminFormData.value.cui = parsed.cui;
+        if (parsed.adresa) adminFormData.value.adresa = parsed.adresa;
+        if (parsed.telefon) adminFormData.value.telefon = parsed.telefon;
+        if (parsed.email) adminFormData.value.email = parsed.email;
+        if (parsed.website) adminFormData.value.website = parsed.website;
+      } catch (err) { errorsFound.push(`Contact: ${err.message}`); }
     }
 
     // 2. Procesăm Linkul cu ROF-ul
     if (robotUrlRof.value) {
       aiStatusText.value = '🤖 [2/4] Citesc ROF-ul și extrag atribuțiile...';
-      const res = await fetch('/api/robot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: robotUrlRof.value, type: 'rof', nodeName: nodeName })
-      });
-      const data = await res.json();
-      if (data.error) throw new Error("Eroare la Link 2 (ROF): " + data.error); // AFIȘĂM EROAREA
-      
-      const parsed = JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
-      if (parsed.reglementare) adminFormData.value.department_rof = parsed.reglementare;
-      if (parsed.atributii) adminFormData.value.rol = parsed.atributii;
+      try {
+        const parsed = await callRobot(robotUrlRof.value, 'rof', nodeName);
+        if (parsed.reglementare) adminFormData.value.department_rof = parsed.reglementare;
+        if (parsed.atributii) adminFormData.value.rol = parsed.atributii;
+      } catch (err) { errorsFound.push(`ROF: ${err.message}`); }
     }
 
     // 3. Procesăm Linkul cu Statul de Funcții
     if (robotUrlHr.value) {
       aiStatusText.value = '🤖 [3/4] Citesc Statul de Funcții (HR)...';
-      const res = await fetch('/api/robot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: robotUrlHr.value, type: 'hr' })
-      });
-      const data = await res.json();
-      if (data.error) throw new Error("Eroare la Link 3 (HR): " + data.error); // AFIȘĂM EROAREA
-      
-      const parsedHr = JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
-      hrRows.value.splice(0);
-      parsedHr.forEach(row => {
-        hrRows.value.push({
-          functie: row.functie || 'N/A',
-          ocupate: row.ocupate || 0,
-          vacante: row.vacante || 0,
-          total: row.total || (row.ocupate + row.vacante),
-          statut: row.ocupate > 0 ? 'Activ' : 'Vacant',
-          finColumns: []
+      try {
+        const parsedHr = await callRobot(robotUrlHr.value, 'hr', nodeName);
+        hrRows.value.splice(0);
+        parsedHr.forEach(row => {
+          hrRows.value.push({
+            functie: row.functie || 'N/A',
+            ocupate: row.ocupate || 0,
+            vacante: row.vacante || 0,
+            total: row.total || (row.ocupate + row.vacante),
+            statut: row.ocupate > 0 ? 'Activ' : 'Vacant',
+            finColumns: []
+          });
         });
-      });
+      } catch (err) { errorsFound.push(`HR: ${err.message}`); }
     }
 
     // 4. Procesăm Linkul cu Salariile
     if (robotUrlSalarii.value) {
       aiStatusText.value = '🤖 [4/4] Citesc Centralizatorul Salarial...';
-      const res = await fetch('/api/robot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: robotUrlSalarii.value, type: 'salarii' })
-      });
-      const data = await res.json();
-      if (data.error) throw new Error("Eroare la Link 4 (Salarii): " + data.error); // AFIȘĂM EROAREA
-      
-      const parsedSalarii = JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
-      parsedSalarii.forEach(sal => {
-        const hrRow = hrRows.value.find(r => r.functie.toLowerCase().includes(sal.functie.toLowerCase()));
-        if (hrRow && sal.salariu_baza) {
-          hrRow.finColumns.push({
-            id: 'fin_ai_' + Date.now() + '_' + Math.random(),
-            name: 'Salariu de bază',
-            type: 'valoare',
-            value: parseFloat(sal.salariu_baza)
-          });
-        }
-      });
+      try {
+        const parsedSalarii = await callRobot(robotUrlSalarii.value, 'salarii', nodeName);
+        parsedSalarii.forEach(sal => {
+          const hrRow = hrRows.value.find(r => r.functie.toLowerCase().includes(sal.functie.toLowerCase()));
+          if (hrRow && sal.salariu_baza) {
+            hrRow.finColumns.push({
+              id: 'fin_ai_' + Date.now() + '_' + Math.random(),
+              name: 'Salariu de bază',
+              type: 'valoare',
+              value: parseFloat(sal.salariu_baza)
+            });
+          }
+        });
+      } catch (err) { errorsFound.push(`Salarii: ${err.message}`); }
     }
 
-    aiStatusText.value = '✅ Robotul a terminat cu succes! Verifică datele și apasă Salvează.';
+    // AFIȘĂM REZULTATUL FINAL
+    if (errorsFound.length > 0) {
+      aiStatusText.value = `⚠️ Robotul a terminat, dar ${errorsFound.length} link(uri) au dat greș. (Vezi consola)`;
+      console.log("ERORI ROBOT:", errorsFound);
+    } else {
+      aiStatusText.value = '✅ Robotul a terminat cu succes! Verifică datele și apasă Salvează.';
+    }
     
   } catch (error) {
-    console.error('Eroare Robot:', error);
-    // AICI AM MODIFICAT: Îți arată eroarea exactă pe ecran, în loc să o ascundă
-    aiStatusText.value = '❌ ' + error.message; 
-    alert(error.message);
+    console.error('Eroare Generală Robot:', error);
+    aiStatusText.value = '❌ Eroare critică: ' + error.message;
   } finally {
     isAiLoading.value = false;
   }
