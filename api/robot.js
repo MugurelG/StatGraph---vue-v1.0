@@ -13,20 +13,17 @@ export default async function handler(req, res) {
     
     let parts = [];
 
-    // 1. Adăugăm fișierele (PDF/Imagini) sub formă de Base64
     if (files && files.length > 0) {
       files.forEach(file => {
         parts.push({ inlineData: { mimeType: file.mimeType, data: file.data } });
       });
     }
 
-    // 2. Adăugăm textul brut (dacă există)
     if (rawText && rawText.trim().length > 0) {
       parts.push({ text: `TEXT BRUT COPITAT DE UTILIZATOR:\n${rawText}` });
     }
 
-        // 3. Construim PROMPUL specific în funcție de tipul nodului
-     let prompt = `Ești un expert în administrația publică din România. Analizează documentele/textul de mai jos pentru entitatea numită "${nodeName}" (Tip: ${nodeType}).
+    let prompt = `Ești un expert în administrația publică din România. Analizează documentele/textul de mai jos pentru entitatea numită "${nodeName}" (Tip: ${nodeType}).
     Reguli:
     1. Extrage datele specifice pentru acest tip de nod STRICT din documentele sau textul furnizat de utilizator.
     2. Dacă o informație LIPSEȘTE din documente, încearcă să folosești-ți cunoștințele generale (ex: găsește Codul COR, Baza legală).
@@ -75,16 +72,33 @@ export default async function handler(req, res) {
 
     parts.unshift({ text: prompt });
 
-    // 4. Trimitem către Gemini
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
-    const geminiRes = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts }] })
-    });
+    // NOU: Mecanism de Reîncercare (Retry)
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    let geminiRes;
+    let attempts = 0;
+    let geminiData;
 
-    const geminiData = await geminiRes.json();
-    if (!geminiRes.ok) throw new Error(geminiData.error?.message || 'Eroare Google AI');
+    while (attempts < 3) {
+      geminiRes = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts }] })
+      });
+
+      geminiData = await geminiRes.json();
+
+      // Dacă avem eroare de "High demand" (503), așteptăm 2 secunde și reîncercăm
+      if (geminiRes.status === 503 || (geminiData.error && geminiData.error.message.includes('high demand'))) {
+        attempts++;
+        await new Promise(r => setTimeout(r, 2000));
+      } else {
+        break; // Dacă am primit un răspuns (bun sau alt tip de eroare), ieșim din buclă
+      }
+    }
+
+    if (!geminiRes.ok) {
+      throw new Error(geminiData.error?.message || 'Eroare Google AI');
+    }
 
     let aiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
     aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
