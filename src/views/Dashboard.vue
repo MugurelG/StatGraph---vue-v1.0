@@ -2196,11 +2196,6 @@ const fileToBase64 = (file) => {
 };
 
 const runDataRobot = async () => {
-  if (robotFiles.value.length === 0 && !robotRawText.value) {
-    alert('Te rog încarcă cel puțin un fișier sau lipește un text.');
-    return;
-  }
-
   isAiLoading.value = true;
   aiStatusText.value = '🤖 Robotul citește documentele și analizează datele...';
 

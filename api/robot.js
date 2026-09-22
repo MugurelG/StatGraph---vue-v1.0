@@ -25,11 +25,7 @@ export default async function handler(req, res) {
       parts.push({ text: `TEXT BRUT COPITAT DE UTILIZATOR:\n${rawText}` });
     }
 
-    if (parts.length === 0) {
-      return res.status(400).json({ error: 'Nu ai furnizat niciun text sau fișier.' });
-    }
-
-    // 3. Construim PROMPUL specific în funcție de tipul nodului
+        // 3. Construim PROMPUL specific în funcție de tipul nodului
     let prompt = `Ești un expert în administrația publică din România. Analizează documentele/textul de mai jos pentru entitatea numită "${nodeName}" (Tip: ${nodeType}).
     Reguli:
     1. Extrage datele specifice pentru acest tip de nod.
@@ -79,7 +75,7 @@ export default async function handler(req, res) {
     parts.unshift({ text: prompt });
 
     // 4. Trimitem către Gemini
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
     const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
