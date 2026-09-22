@@ -75,12 +75,12 @@ export default async function handler(req, res) {
       content.push({ type: 'text', text: `TEXT BRUT COPITAT DE UTILIZATOR:\n${rawText}` });
     }
 
-    // 4. NOU: Lista de modele gratuite (Fallback automat)
+     // 4. NOU: Lista de modele gratuite actualizată (Fallback automat)
     const freeModels = [
-      'meta-llama/llama-3.2-3b-instruct:free',
-      'qwen/qwen-2.5-7b-instruct:free',
-      'mistralai/mistral-7b-instruct:free',
-      'openchat/openchat-7b:free'
+      'deepseek/deepseek-chat:free', // Extrem de inteligent, gratuit
+      'meta-llama/llama-3.3-70b-instruct:free', // Foarte bun, creat de Meta
+      'google/gemini-2.0-flash-exp:free', // Varianta de Google
+      'qwen/qwen-2.5-7b-instruct:free' // Rapid si stabil
     ];
 
     let lastError = null;
