@@ -26,11 +26,12 @@ export default async function handler(req, res) {
     }
 
         // 3. Construim PROMPUL specific în funcție de tipul nodului
-    let prompt = `Ești un expert în administrația publică din România. Analizează documentele/textul de mai jos pentru entitatea numită "${nodeName}" (Tip: ${nodeType}).
+     let prompt = `Ești un expert în administrația publică din România. Analizează documentele/textul de mai jos pentru entitatea numită "${nodeName}" (Tip: ${nodeType}).
     Reguli:
-    1. Extrage datele specifice pentru acest tip de nod.
-    2. Dacă o informație LIPSEȘTE din documente, folosește-ți cunoștințele tale generale (ex: găsește Codul COR, CUI-ul oficial, Baza legală) pentru a o completa.
-    3. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
+    1. Extrage datele specifice pentru acest tip de nod STRICT din documentele sau textul furnizat de utilizator.
+    2. Dacă o informație LIPSEȘTE din documente, încearcă să folosești-ți cunoștințele generale (ex: găsește Codul COR, Baza legală).
+    3. Dacă NU EȘTI 100% SIGUR de o informație exactă (ex: CUI, Telefon, Adresa exactă), returnează valoarea "null". ESTE STRICT INTERZIS SĂ INVENTEZI DATE FINANCIARE SAU DE IDENTITATE.
+    4. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
     if (nodeType === 'Instituție') {
       prompt += `JSON-ul trebuie să aibă exact această structură:
@@ -75,7 +76,7 @@ export default async function handler(req, res) {
     parts.unshift({ text: prompt });
 
     // 4. Trimitem către Gemini
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
     const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
