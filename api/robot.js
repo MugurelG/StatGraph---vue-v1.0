@@ -3,7 +3,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Metoda nepermisa' });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   
   // VERIFICARE DEBUG: Vedem exact ce cheie citește Vercel (primele 6 și ultimele 4 caractere)
   const maskedKey = apiKey ? `${apiKey.substring(0, 6)}...${apiKey.slice(-4)}` : 'LIPSESTE COMPLET';
