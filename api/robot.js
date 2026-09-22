@@ -9,47 +9,73 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { url, type, nodeName } = req.body;
-
-    // 1. Descărcăm conținutul de la linkul furnizat (cu User-Agent de browser)
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
-    });
+    const { nodeName, nodeType, rawText, files } = req.body;
     
-    if (!response.ok) throw new Error(`Nu pot accesa linkul (Eroare ${response.status}).`);
-    
-    const contentType = response.headers.get('content-type') || '';
     let parts = [];
 
-    // 2. Verificăm dacă e PDF sau pagină Web (HTML)
-    if (contentType.includes('application/pdf')) {
-      const buffer = await response.arrayBuffer();
-      const base64Pdf = Buffer.from(buffer).toString('base64');
-      parts.push({ inlineData: { mimeType: 'application/pdf', data: base64Pdf } });
-    } else {
-      const htmlText = await response.text();
-      // Curățăm HTML-ul și limităm textul la primele 15000 caractere ca să nu blocăm AI-ul
-      const cleanText = htmlText.replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
-                                .replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, '')
-                                .replace(/<[^>]+>/g, ' ')
-                                .replace(/\s+/g, ' ')
-                                .trim()
-                                .substring(0, 15000);
-      parts.push({ text: cleanText });
+    // 1. Adăugăm fișierele (PDF/Imagini) sub formă de Base64
+    if (files && files.length > 0) {
+      files.forEach(file => {
+        parts.push({ inlineData: { mimeType: file.mimeType, data: file.data } });
+      });
     }
 
-    // 3. Construim Promptul
-    let prompt = '';
-    if (type === 'contact') {
-      prompt = `Din textul/documentul de mai jos, extrage datele de identificare și contact. Returnează STRICT un JSON valid: { "cui": "", "acronim": "", "adresa": "", "telefon": "", "email": "", "website": "" }`;
-    } else if (type === 'rof') {
-      prompt = `Din documentul ROF de mai jos, găsește reglementarea și atribuțiile pentru entitatea: "${nodeName}". Returnează STRICT un JSON valid: { "reglementare": "Cap. X, Art. Y", "atributii": "rezumat complet" }`;
-    } else if (type === 'hr') {
-      prompt = `Din documentul cu statul de funcții de mai jos, extrage posturile, numărul de ocupate și vacante. Returnează STRICT un array JSON valid: [{ "functie": "", "ocupate": 0, "vacante": 0, "total": 0 }]`;
-    } else if (type === 'salarii') {
-      prompt = `Din documentul cu salariile de mai jos, extrage salariul de bază pentru fiecare funcție. Returnează STRICT un array JSON valid: [{ "functie": "", "salariu_baza": 0 }]`;
+    // 2. Adăugăm textul brut (dacă există)
+    if (rawText && rawText.trim().length > 0) {
+      parts.push({ text: `TEXT BRUT COPITAT DE UTILIZATOR:\n${rawText}` });
     }
-    
+
+    if (parts.length === 0) {
+      return res.status(400).json({ error: 'Nu ai furnizat niciun text sau fișier.' });
+    }
+
+    // 3. Construim PROMPUL specific în funcție de tipul nodului
+    let prompt = `Ești un expert în administrația publică din România. Analizează documentele/textul de mai jos pentru entitatea numită "${nodeName}" (Tip: ${nodeType}).
+    Reguli:
+    1. Extrage datele specifice pentru acest tip de nod.
+    2. Dacă o informație LIPSEȘTE din documente, folosește-ți cunoștințele tale generale (ex: găsește Codul COR, CUI-ul oficial, Baza legală) pentru a o completa.
+    3. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
+
+    if (nodeType === 'Instituție') {
+      prompt += `JSON-ul trebuie să aibă exact această structură:
+      {
+        "cui": "număr sau null",
+        "acronim": "scurtare sau null",
+        "calitate_bugetara": "Ordonator principal/secundar/terțiar/Nu se aplică",
+        "adresa": "adresa completă",
+        "telefon": "telefon",
+        "email": "email",
+        "website": "site web",
+        "rol": "rezumatul atribuțiilor generale",
+        "department_rof": "reglementarea (ex: Hotărârea X/2020)",
+        "hr_rows": [ { "functie": "Nume post", "ocupate": 0, "vacante": 0, "total": 0, "salariu_baza": 0 } ]
+      }`;
+    } else if (nodeType === 'Departament' || nodeType === 'Birou') {
+      prompt += `JSON-ul trebuie să aibă exact această structură:
+      {
+        "department_rof": "Articolul și capitolul din ROF care reglementează acest departament (ex: Cap. II, Art. 15)",
+        "rol": "rezumatul complet al atribuțiilor departamentului",
+        "hr_rows": [ { "functie": "Nume post", "ocupate": 0, "vacante": 0, "total": 0, "salariu_baza": 0 } ]
+      }`;
+    } else if (nodeType === 'Rol') {
+      prompt += `JSON-ul trebuie să aibă exact această structură:
+      {
+        "role_cod_cor": "Codul COR din 6 cifre",
+        "role_baza_legala": "Legea sau HG care reglementează funcția",
+        "role_reglementare": "Articolul specific din ROF",
+        "role_gradatie_treapta": "Gradația sau treapta (dacă există)",
+        "rol": "rezumatul complet al atribuțiilor rolului",
+        "fin_columns": [ { "name": "Salariu de bază", "type": "valoare", "value": 0 }, { "name": "Spor vechime", "type": "procent", "value": 15 } ]
+      }`;
+    } else if (nodeType === 'Comisie') {
+      prompt += `JSON-ul trebuie să aibă exact această structură:
+      {
+        "department_rof": "Baza legală de înființare a comisiei",
+        "rol": "atribuțiile comisiei",
+        "committee_members": [ { "nume": "Numele persoanei", "rol_in_comisie": "Președinte/Membru", "functia_de_baza": "Funcția din instituție" } ]
+      }`;
+    }
+
     parts.unshift({ text: prompt });
 
     // 4. Trimitem către Gemini
@@ -70,7 +96,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Eroare Robot:', error);
-    // Afișăm și cauza erorii (ex: DNS, Timeout, SSL)
-    const errMsg = error.cause ? `${error.message} (Cauza: ${error.cause.message || error.cause.code})` : error.message;
-    return res.status(500).json({ error: errMsg });
+    return res.status(500).json({ error: error.message });
   }
+}

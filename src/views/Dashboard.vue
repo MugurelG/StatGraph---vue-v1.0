@@ -720,13 +720,16 @@ const adminFormData = ref({
   role_statut: 'Vacant',
 });
 
-// --- VARIABILE PENTRU ROBOT AUTOMATIZARE ---
+// --- VARIABILE PENTRU ROBOT AI COMPLET ---
 const isAiLoading = ref(false);
 const aiStatusText = ref('');
-const robotUrlContact = ref('');
-const robotUrlRof = ref('');
-const robotUrlHr = ref('');
-const robotUrlSalarii = ref('');
+const robotRawText = ref('');
+const robotFiles = ref([]); // Aici stocăm fișierele PDF/Imagini încărcate
+
+// Funcție pentru a reține fișierele încărcate
+const handleRobotFileUpload = (event) => {
+  robotFiles.value = Array.from(event.target.files);
+};
 
 let finColIdCounter = 0; // Contor pentru ID-uri unice de coloane
 // Tabelul de jos (Date Personal)
@@ -2178,110 +2181,139 @@ const handleDeleteAccount = async () => {
   await handleLogout();
 };
 
-// Funcție ajutătoare care comunică cu serverul și prinde erorile de timeout
-const callRobot = async (url, type, nodeName) => {
-  const res = await fetch('/api/robot', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, type, nodeName })
+// Funcție ajutătoare pentru a converti fișierele în Base64 (pentru a le trimite la server)
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      // Ștergem prefixul "data:application/pdf;base64," ca să rămână doar codul pur
+      const base64String = reader.result.split(',').pop();
+      resolve({ mimeType: file.type, data: base64String });
+    };
+    reader.onerror = error => reject(error);
   });
-  
-  // Dacă Vercel dă eroare 500/502 (A server error...), prindem eroarea aici
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Serverul nu a putut procesa linkul (Posibil Timeout). Cod: ${res.status}`);
-  }
-  
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  
-  // Curățăm și returnăm JSON-ul de la AI
-  return JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
 };
 
 const runDataRobot = async () => {
-  if (!robotUrlContact.value && !robotUrlRof.value && !robotUrlHr.value && !robotUrlSalarii.value) {
-    alert('Te rog introdu cel puțin un link pentru ca Robotul să poată lucra.');
+  if (robotFiles.value.length === 0 && !robotRawText.value) {
+    alert('Te rog încarcă cel puțin un fișier sau lipește un text.');
     return;
   }
 
   isAiLoading.value = true;
-  const nodeName = adminFormData.value.nume || adminFormData.value.node_name || selectedAdminNode.value?.label;
-  let errorsFound = []; // Aici strângem erorile ca să le afișăm la final, dar nu oprim robotul
+  aiStatusText.value = '🤖 Robotul citește documentele și analizează datele...';
 
   try {
-    // 1. Procesăm Linkul de Contact
-    if (robotUrlContact.value) {
-      aiStatusText.value = '🤖 [1/4] Citesc datele de contact...';
-      try {
-        const parsed = await callRobot(robotUrlContact.value, 'contact', nodeName);
-        if (parsed.cui) adminFormData.value.cui = parsed.cui;
-        if (parsed.adresa) adminFormData.value.adresa = parsed.adresa;
-        if (parsed.telefon) adminFormData.value.telefon = parsed.telefon;
-        if (parsed.email) adminFormData.value.email = parsed.email;
-        if (parsed.website) adminFormData.value.website = parsed.website;
-      } catch (err) { errorsFound.push(`Contact: ${err.message}`); }
+    // 1. Determinăm tipul nodului curent
+    let nodeType = 'Rol';
+    if (adminFormData.value.is_institution) nodeType = 'Instituție';
+    else if (adminFormData.value.is_department) nodeType = 'Departament';
+    else if (adminFormData.value.is_office) nodeType = 'Birou';
+    else if (adminFormData.value.is_committee) nodeType = 'Comisie';
+
+    const nodeName = adminFormData.value.nume || adminFormData.value.node_name || selectedAdminNode.value?.label;
+
+    // 2. Transformăm fișierele în Base64
+    aiStatusText.value = '📂 Pregătesc fișierele pentru trimitere...';
+    const base64Files = await Promise.all(robotFiles.value.map(f => fileToBase64(f)));
+
+    // 3. Trimitem către serverul Robot
+    aiStatusText.value = '🚀 Trimit datele către AI... (Acest pas poate dura 10-20 secunde)';
+    const res = await fetch('/api/robot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nodeName: nodeName,
+        nodeType: nodeType,
+        rawText: robotRawText.value,
+        files: base64Files
+      })
+    });
+
+    // VERIFICARE IMPORTANTĂ: Dacă serverul dă eroare (Timeout 500/502), oprim procesul elegant
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Serverul a eșuat (Posibil Timeout Vercel). Cod: ${res.status}`);
     }
 
-    // 2. Procesăm Linkul cu ROF-ul
-    if (robotUrlRof.value) {
-      aiStatusText.value = '🤖 [2/4] Citesc ROF-ul și extrag atribuțiile...';
-      try {
-        const parsed = await callRobot(robotUrlRof.value, 'rof', nodeName);
-        if (parsed.reglementare) adminFormData.value.department_rof = parsed.reglementare;
-        if (parsed.atributii) adminFormData.value.rol = parsed.atributii;
-      } catch (err) { errorsFound.push(`ROF: ${err.message}`); }
-    }
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
 
-    // 3. Procesăm Linkul cu Statul de Funcții
-    if (robotUrlHr.value) {
-      aiStatusText.value = '🤖 [3/4] Citesc Statul de Funcții (HR)...';
-      try {
-        const parsedHr = await callRobot(robotUrlHr.value, 'hr', nodeName);
-        hrRows.value.splice(0);
-        parsedHr.forEach(row => {
-          hrRows.value.push({
-            functie: row.functie || 'N/A',
-            ocupate: row.ocupate || 0,
-            vacante: row.vacante || 0,
-            total: row.total || (row.ocupate + row.vacante),
-            statut: row.ocupate > 0 ? 'Activ' : 'Vacant',
-            finColumns: []
-          });
+    // 4. Curățăm și parsează răspunsul AI-ului
+    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
+    console.log("Răspuns Brut AI:", aiResult); // Ca să vedem în consolă ce a zis AI-ul
+    const parsedData = JSON.parse(aiResult);
+
+    // 5. INJECTĂM datele în formular în funcție de ce a găsit AI-ul!
+    
+    // Campuri Comune
+    if (parsedData.cui) adminFormData.value.cui = parsedData.cui;
+    if (parsedData.acronim) adminFormData.value.acronim = parsedData.acronim;
+    if (parsedData.calitate_bugetara) adminFormData.value.calitate_bugetara = parsedData.calitate_bugetara;
+    if (parsedData.adresa) adminFormData.value.adresa = parsedData.adresa;
+    if (parsedData.telefon) adminFormData.value.telefon = parsedData.telefon;
+    if (parsedData.email) adminFormData.value.email = parsedData.email;
+    if (parsedData.website) adminFormData.value.website = parsedData.website;
+    if (parsedData.rol) adminFormData.value.rol = parsedData.rol;
+    if (parsedData.department_rof) adminFormData.value.department_rof = parsedData.department_rof;
+
+    // Campuri ROL
+    if (parsedData.role_cod_cor) adminFormData.value.role_cod_cor = parsedData.role_cod_cor;
+    if (parsedData.role_baza_legala) adminFormData.value.role_baza_legala = parsedData.role_baza_legala;
+    if (parsedData.role_reglementare) adminFormData.value.role_reglementare = parsedData.role_reglementare;
+    if (parsedData.role_gradatie_treapta) adminFormData.value.role_gradatie_treapta = parsedData.role_gradatie_treapta;
+
+    // Tabel HR (Instituție / Departament / Birou)
+    if (parsedData.hr_rows && Array.isArray(parsedData.hr_rows)) {
+      hrRows.value.splice(0);
+      parsedData.hr_rows.forEach(row => {
+        let dynamicCols = [];
+        if (row.salariu_baza) {
+          dynamicCols.push({ id: 'fin_ai_' + Date.now() + '_' + Math.random(), name: 'Salariu de bază', type: 'valoare', value: parseFloat(row.salariu_baza) });
+        }
+        hrRows.value.push({
+          functie: row.functie || 'N/A',
+          ocupate: row.ocupate || 0,
+          vacante: row.vacante || 0,
+          total: row.total || ((row.ocupate || 0) + (row.vacante || 0)),
+          statut: (row.ocupate || 0) > 0 ? 'Activ' : 'Vacant',
+          finColumns: dynamicCols
         });
-      } catch (err) { errorsFound.push(`HR: ${err.message}`); }
+      });
     }
 
-    // 4. Procesăm Linkul cu Salariile
-    if (robotUrlSalarii.value) {
-      aiStatusText.value = '🤖 [4/4] Citesc Centralizatorul Salarial...';
-      try {
-        const parsedSalarii = await callRobot(robotUrlSalarii.value, 'salarii', nodeName);
-        parsedSalarii.forEach(sal => {
-          const hrRow = hrRows.value.find(r => r.functie.toLowerCase().includes(sal.functie.toLowerCase()));
-          if (hrRow && sal.salariu_baza) {
-            hrRow.finColumns.push({
-              id: 'fin_ai_' + Date.now() + '_' + Math.random(),
-              name: 'Salariu de bază',
-              type: 'valoare',
-              value: parseFloat(sal.salariu_baza)
-            });
-          }
+    // Coloane Financiare (Doar pentru Rol)
+    if (parsedData.fin_columns && Array.isArray(parsedData.fin_columns)) {
+      roleFinColumns.value.splice(0);
+      parsedData.fin_columns.forEach(col => {
+        roleFinColumns.value.push({
+          id: 'fin_ai_' + Date.now() + '_' + Math.random(),
+          name: col.name || 'Venit',
+          type: col.type || 'valoare',
+          value: parseFloat(col.value) || 0
         });
-      } catch (err) { errorsFound.push(`Salarii: ${err.message}`); }
+      });
     }
 
-    // AFIȘĂM REZULTATUL FINAL
-    if (errorsFound.length > 0) {
-      aiStatusText.value = `⚠️ Robotul a terminat, dar ${errorsFound.length} link(uri) au dat greș. (Vezi consola)`;
-      console.log("ERORI ROBOT:", errorsFound);
-    } else {
-      aiStatusText.value = '✅ Robotul a terminat cu succes! Verifică datele și apasă Salvează.';
+    // Membri Comisie
+    if (parsedData.committee_members && Array.isArray(parsedData.committee_members)) {
+      committeeMembers.value.splice(0);
+      parsedData.committee_members.forEach(mem => {
+        committeeMembers.value.push({
+          nume: mem.nume || '',
+          rol_in_comisie: mem.rol_in_comisie || '',
+          functia_de_baza: mem.functia_de_baza || ''
+        });
+      });
     }
+
+    aiStatusText.value = '✅ Robotul a terminat! Verifică datele și apasă Salvează.';
     
   } catch (error) {
-    console.error('Eroare Generală Robot:', error);
-    aiStatusText.value = '❌ Eroare critică: ' + error.message;
+    console.error('Eroare Robot:', error);
+    aiStatusText.value = '❌ Eroare: ' + error.message;
+    alert('Eroare Robot: ' + error.message);
   } finally {
     isAiLoading.value = false;
   }

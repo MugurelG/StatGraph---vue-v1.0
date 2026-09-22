@@ -342,11 +342,15 @@
  <div v-if="adminAction === 'create' || adminAction === 'edit'" class="new-admin-form">
 
  
-      <!-- === PANOU ROBOT AUTOMATIZARE === -->
+            <!-- === PANOU ROBOT AI COMPLET === -->
       <div class="ai-parser-panel" style="background: rgba(139, 92, 246, 0.1); border: 1px solid #8b5cf6; border-radius: 12px; padding: 20px; margin-bottom: 25px;">
-        <h3 style="color: #a78bfa; font-size: 1.1rem; margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
-          🤖 Robot Automatizare Date
+        <h3 style="color: #a78bfa; font-size: 1.1rem; margin: 0 0 5px 0; display: flex; align-items: center; gap: 10px;">
+          🤖 Robot Automatizare AI
         </h3>
+        <p style="font-size: 0.8rem; color: #94a3b8; margin: 0 0 15px 0;">
+          Robotul știe că editezi un nod de tip <strong style="color: #facc15;">{{ adminFormData.is_institution ? 'Instituție' : (adminFormData.is_department ? 'Departament' : (adminFormData.is_office ? 'Birou' : (adminFormData.is_committee ? 'Comisie' : 'Rol'))) }}</strong>. 
+          Încarcă documentele (ROF, Contact, HR) sau dă Paste la text, iar el va completa formularul. Dacă lipsește o informație, o va întreba direct pe AI.
+        </p>
         
         <div v-if="isAiLoading" style="background: #0f172a; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-family: monospace; font-size: 0.85rem; color: #16a34a;">
           {{ aiStatusText || 'Robotul procesează...' }}
@@ -354,32 +358,28 @@
 
         <div style="display: flex; flex-direction: column; gap: 15px;">
           
-          <!-- LINK 1: CONTACT -->
+          <!-- ZONA DE UPLOAD FISIERE -->
           <div>
-            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">1. Link Date de Contact / Identitate</label>
-            <input type="text" v-model="robotUrlContact" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box;" placeholder="https://primaria.ro/contact">
-          </div>
-          
-          <!-- LINK 2: ROF -->
-          <div>
-            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">2. Link ROF (Regulament)</label>
-            <input type="text" v-model="robotUrlRof" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box;" placeholder="https://primaria.ro/rof.pdf">
+            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">1. Încarcă Documente (PDF, Imagini) - Opțional</label>
+            <input type="file" @change="handleRobotFileUpload" multiple accept=".pdf,image/*" 
+                   style="width: 100%; background: #0f172a; border: 1px dashed #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box; cursor: pointer;">
+            <div v-if="robotFiles.length > 0" style="font-size: 0.75rem; color: #16a34a; margin-top: 5px;">
+              {{ robotFiles.length }} fișier(e) încărcat(e).
+            </div>
           </div>
 
-          <!-- LINK 3: STAT FUNCTII -->
+          <!-- ZONA DE PASTE TEXT -->
           <div>
-            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">3. Link Stat de Funcții (Posturi)</label>
-            <input type="text" v-model="robotUrlHr" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box;" placeholder="https://primaria.ro/stat-functii">
+            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">2. Sau lipește text aici (Ctrl+V) - Opțional</label>
+            <textarea v-model="robotRawText" rows="4" 
+                      style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box;" 
+                      placeholder="Copiază aici text de pe site-ul instituției (pagină de contact, prevederi din ROF, listă de angajați...)"></textarea>
           </div>
 
-          <!-- LINK 4: SALARII -->
-          <div>
-            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">4. Link Centralizator Salarial</label>
-            <input type="text" v-model="robotUrlSalarii" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box;" placeholder="https://primaria.ro/salarii">
-          </div>
-
-          <button @click="runDataRobot" style="background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px;">
-            🚀 Rulează Robotul
+          <button @click="runDataRobot" :disabled="isAiLoading || (robotFiles.length === 0 && !robotRawText)" 
+                  style="background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px; opacity: 1; transition: 0.2s;">
+            <span v-if="!isAiLoading">🚀 Rulează Robotul AI</span>
+            <span v-else>⏳ AI Procesează...</span>
           </button>
         </div>
       </div>
