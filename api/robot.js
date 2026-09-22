@@ -11,31 +11,34 @@ export default async function handler(req, res) {
   try {
     const { url, type, nodeName } = req.body;
 
-    // 1. Descărcăm conținutul de la linkul furnizat
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Nu pot accesa linkul: ${response.statusText}`);
+    // 1. Descărcăm conținutul de la linkul furnizat (cu User-Agent de browser)
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' }
+    });
+    
+    if (!response.ok) throw new Error(`Nu pot accesa linkul (Eroare ${response.status}).`);
     
     const contentType = response.headers.get('content-type') || '';
     let parts = [];
 
     // 2. Verificăm dacă e PDF sau pagină Web (HTML)
     if (contentType.includes('application/pdf')) {
-      // Dacă e PDF, îl transformăm în Base64 pentru a-l trimite la Gemini
       const buffer = await response.arrayBuffer();
       const base64Pdf = Buffer.from(buffer).toString('base64');
       parts.push({ inlineData: { mimeType: 'application/pdf', data: base64Pdf } });
     } else {
-      // Dacă e pagină web, curățăm HTML-ul și păstrăm doar textul
       const htmlText = await response.text();
+      // Curățăm HTML-ul și limităm textul la primele 15000 caractere ca să nu blocăm AI-ul
       const cleanText = htmlText.replace(/<script[^>]*>([\s\S]*?)<\/script>/gi, '')
                                 .replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, '')
                                 .replace(/<[^>]+>/g, ' ')
                                 .replace(/\s+/g, ' ')
-                                .trim();
+                                .trim()
+                                .substring(0, 15000);
       parts.push({ text: cleanText });
     }
 
-    // 3. Construim Promptul în funcție de ce fel de date vrem să extragem
+    // 3. Construim Promptul
     let prompt = '';
     if (type === 'contact') {
       prompt = `Din textul/documentul de mai jos, extrage datele de identificare și contact. Returnează STRICT un JSON valid: { "cui": "", "acronim": "", "adresa": "", "telefon": "", "email": "", "website": "" }`;
@@ -49,7 +52,7 @@ export default async function handler(req, res) {
     
     parts.unshift({ text: prompt });
 
-    // 4. Trimitem către Gemini 2.5 Flash (modelul care funcționează pe contul tău)
+    // 4. Trimitem către Gemini
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
