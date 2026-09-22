@@ -86,7 +86,7 @@ export default async function handler(req, res) {
         'X-Title': 'Statgraph Robot' // Numele aplicației pentru OpenRouter
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free', // Model gratuit și stabil
+        model: 'meta-llama/llama-3.1-8b-instruct:free', // Model gratuit, stabil și inteligent
         messages: [{ role: 'user', content: content }]
       })
     });
