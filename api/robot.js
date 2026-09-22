@@ -4,25 +4,20 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
-  
-  // VERIFICARE DEBUG: Vedem exact ce cheie citește Vercel (primele 6 și ultimele 4 caractere)
-  const maskedKey = apiKey ? `${apiKey.substring(0, 6)}...${apiKey.slice(-4)}` : 'LIPSESTE COMPLET';
-  
   if (!apiKey) {
-    return res.status(500).json({ error: `Cheia API lipseste din Vercel. (Cheie detectata: ${maskedKey})` });
+    return res.status(500).json({ error: 'Cheia API lipseste din Vercel.' });
   }
 
   try {
     const { nodeName, nodeType, rawText, files } = req.body;
     
-    // Construim conținutul pentru OpenRouter (format standard OpenAI)
     let content = [];
 
-    // 1. Adăugăm Promptul (Instrucțiunile)
+    // 1. Adăugăm Promptul
     let prompt = `Ești un expert în administrația publică din România. Analizează documentele/textul de mai jos pentru entitatea numită "${nodeName}" (Tip: ${nodeType}).
     Reguli:
     1. Extrage datele specifice pentru acest tip de nod STRICT din documentele sau textul furnizat de utilizator.
-    2. Dacă o informație LIPSEȘTE din documente, încearcă să folosește-ți cunoștințele generale (ex: găsește Codul COR, Baza legală).
+    2. Dacă o informație LIPSEȘTE din documente, încearcă să folosești-ți cunoștințele generale (ex: găsește Codul COR, Baza legală).
     3. Dacă NU EȘTI 100% SIGUR de o informație exactă (ex: CUI, Telefon, Adresa exactă), returnează valoarea "null". ESTE STRICT INTERZIS SĂ INVENTEZI DATE FINANCIARE SAU DE IDENTITATE.
     4. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
@@ -80,33 +75,58 @@ export default async function handler(req, res) {
       content.push({ type: 'text', text: `TEXT BRUT COPITAT DE UTILIZATOR:\n${rawText}` });
     }
 
-    // 4. Trimitem cererea către OpenRouter
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://stat-graph-vue-v1-0.vercel.app', // Necesar pentru OpenRouter
-        'X-Title': 'Statgraph Robot' // Numele aplicației pentru OpenRouter
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.1-8b-instruct:free', // Model gratuit, stabil și inteligent
-        messages: [{ role: 'user', content: content }]
-      })
-    });
+    // 4. NOU: Lista de modele gratuite (Fallback automat)
+    const freeModels = [
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'qwen/qwen-2.5-7b-instruct:free',
+      'mistralai/mistral-7b-instruct:free',
+      'openchat/openchat-7b:free'
+    ];
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || 'Eroare OpenRouter AI');
+    let lastError = null;
 
-    // 5. Extragem răspunsul
-    let aiText = data.choices?.[0]?.message?.content || '';
-    aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+    // 5. Bucla de reîncercare: Încearcă fiecare model pe rând
+    for (const model of freeModels) {
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://stat-graph-vue-v1-0.vercel.app',
+            'X-Title': 'Statgraph Robot'
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: 'user', content: content }]
+          })
+        });
 
-    return res.status(200).json({ result: aiText });
+        const data = await response.json();
+
+        // Dacă modelul e ocupat sau indisponibil, trecem la următorul
+        if (!response.ok || (data.error && (data.error.message.includes('unavailable') || data.error.message.includes('high demand') || data.error.message.includes('rate limit')))) {
+          lastError = data.error?.message || `Modelul ${model} a eșuat`;
+          continue; // Sare la următorul model din listă
+        }
+
+        // Dacă am primit un răspuns valid, îl returnăm
+        let aiText = data.choices?.[0]?.message?.content || '';
+        if (aiText) {
+          aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+          return res.status(200).json({ result: aiText });
+        }
+
+      } catch (err) {
+        lastError = err.message;
+      }
+    }
+
+    // Dacă toate modelele au eșuat
+    throw new Error(`Toate modelele AI gratuite sunt momentan indisponibile. Încearcă din nou peste 5 minute. (Ultima eroare: ${lastError})`);
 
   } catch (error) {
     console.error('Eroare Robot:', error);
-    // Afișăm eroarea exactă PLUS cheia mascată pentru a ști ce cheie a folosit
-    return res.status(500).json({ error: `${error.message} (Cheie folosită: ${maskedKey})` });
+    return res.status(500).json({ error: error.message });
   }
 }
