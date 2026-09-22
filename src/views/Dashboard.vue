@@ -2231,12 +2231,12 @@ const runDataRobot = async () => {
       })
     });
 
-    // VERIFICARE IMPORTANTĂ: Dacă serverul dă eroare (Timeout 500/502), oprim procesul elegant
+       // VERIFICARE IMPORTANTĂ: Afișăm eroarea EXACTĂ de la Vercel
     if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Serverul a eșuat (Posibil Timeout Vercel). Cod: ${res.status}`);
+      const errData = await res.json().catch(() => null);
+      const errMsg = errData?.error || `Eroare server necunoscută. Cod: ${res.status}`;
+      throw new Error(errMsg);
     }
-
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
