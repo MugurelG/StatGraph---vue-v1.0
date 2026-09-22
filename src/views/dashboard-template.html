@@ -376,8 +376,8 @@
                       placeholder="Copiază aici text de pe site-ul instituției (pagină de contact, prevederi din ROF, listă de angajați...)"></textarea>
           </div>
 
-          <button @click="runDataRobot" :disabled="isAiLoading || (robotFiles.length === 0 && !robotRawText)" 
-                  style="background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px; opacity: 1; transition: 0.2s;">
+          <button @click="runDataRobot" :disabled="isAiLoading" 
+                            style="background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px; opacity: 1; transition: 0.2s;">
             <span v-if="!isAiLoading">🚀 Rulează Robotul AI</span>
             <span v-else>⏳ AI Procesează...</span>
           </button>
