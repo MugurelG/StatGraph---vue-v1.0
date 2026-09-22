@@ -4,8 +4,12 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
+  
+  // VERIFICARE DEBUG: Vedem exact ce cheie citește Vercel (primele 6 și ultimele 4 caractere)
+  const maskedKey = apiKey ? `${apiKey.substring(0, 6)}...${apiKey.slice(-4)}` : 'LIPSESTE COMPLET';
+  
   if (!apiKey) {
-    return res.status(500).json({ error: 'Cheia API OpenRouter lipseste din Vercel.' });
+    return res.status(500).json({ error: `Cheia API lipseste din Vercel. (Cheie detectata: ${maskedKey})` });
   }
 
   try {
@@ -102,6 +106,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Eroare Robot:', error);
-    return res.status(500).json({ error: error.message });
+    // Afișăm eroarea exactă PLUS cheia mascată pentru a ști ce cheie a folosit
+    return res.status(500).json({ error: `${error.message} (Cheie folosită: ${maskedKey})` });
   }
 }
