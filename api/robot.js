@@ -3,30 +3,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Metoda nepermisa' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'Cheia API lipseste din Vercel.' });
+    return res.status(500).json({ error: 'Cheia API OpenRouter lipseste din Vercel.' });
   }
 
   try {
     const { nodeName, nodeType, rawText, files } = req.body;
     
-    let parts = [];
+    // Construim conținutul pentru OpenRouter (format standard OpenAI)
+    let content = [];
 
-    if (files && files.length > 0) {
-      files.forEach(file => {
-        parts.push({ inlineData: { mimeType: file.mimeType, data: file.data } });
-      });
-    }
-
-    if (rawText && rawText.trim().length > 0) {
-      parts.push({ text: `TEXT BRUT COPITAT DE UTILIZATOR:\n${rawText}` });
-    }
-
+    // 1. Adăugăm Promptul (Instrucțiunile)
     let prompt = `Ești un expert în administrația publică din România. Analizează documentele/textul de mai jos pentru entitatea numită "${nodeName}" (Tip: ${nodeType}).
     Reguli:
     1. Extrage datele specifice pentru acest tip de nod STRICT din documentele sau textul furnizat de utilizator.
-    2. Dacă o informație LIPSEȘTE din documente, încearcă să folosești-ți cunoștințele generale (ex: găsește Codul COR, Baza legală).
+    2. Dacă o informație LIPSEȘTE din documente, încearcă să folosește-ți cunoștințele generale (ex: găsește Codul COR, Baza legală).
     3. Dacă NU EȘTI 100% SIGUR de o informație exactă (ex: CUI, Telefon, Adresa exactă), returnează valoarea "null". ESTE STRICT INTERZIS SĂ INVENTEZI DATE FINANCIARE SAU DE IDENTITATE.
     4. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
@@ -70,37 +62,40 @@ export default async function handler(req, res) {
       }`;
     }
 
-    parts.unshift({ text: prompt });
+    content.push({ type: 'text', text: prompt });
 
-    // NOU: Mecanism de Reîncercare (Retry)
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
-    let geminiRes;
-    let attempts = 0;
-    let geminiData;
-
-    while (attempts < 3) {
-      geminiRes = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts }] })
+    // 2. Adăugăm fișierele (PDF/Imagini) dacă există
+    if (files && files.length > 0) {
+      files.forEach(file => {
+        content.push({ type: 'image_url', image_url: { url: `data:${file.mimeType};base64,${file.data}` } });
       });
-
-      geminiData = await geminiRes.json();
-
-      // Dacă avem eroare de "High demand" (503), așteptăm 2 secunde și reîncercăm
-      if (geminiRes.status === 503 || (geminiData.error && geminiData.error.message.includes('high demand'))) {
-        attempts++;
-        await new Promise(r => setTimeout(r, 2000));
-      } else {
-        break; // Dacă am primit un răspuns (bun sau alt tip de eroare), ieșim din buclă
-      }
     }
 
-    if (!geminiRes.ok) {
-      throw new Error(geminiData.error?.message || 'Eroare Google AI');
+    // 3. Adăugăm textul brut dacă există
+    if (rawText && rawText.trim().length > 0) {
+      content.push({ type: 'text', text: `TEXT BRUT COPITAT DE UTILIZATOR:\n${rawText}` });
     }
 
-    let aiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    // 4. Trimitem cererea către OpenRouter
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://stat-graph-vue-v1-0.vercel.app', // Necesar pentru OpenRouter
+        'X-Title': 'Statgraph Robot' // Numele aplicației pentru OpenRouter
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.0-flash-exp:free', // Model gratuit și stabil
+        messages: [{ role: 'user', content: content }]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Eroare OpenRouter AI');
+
+    // 5. Extragem răspunsul
+    let aiText = data.choices?.[0]?.message?.content || '';
     aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
 
     return res.status(200).json({ result: aiText });
