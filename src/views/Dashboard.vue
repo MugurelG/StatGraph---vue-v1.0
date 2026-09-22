@@ -9,7 +9,7 @@ import TreemapChart from '../components/TreemapChart.vue';
 import AuthModal from '../components/auth/AuthModal.vue';
 import html2pdf from 'html2pdf.js';
 import DynamicFinTable from '../components/DynamicFinTable.vue';
-import { Home, Landmark, MapPin, Building, LogOut, Trash2, User, Pencil, Plus, Edit3, Move, Search, BookOpen, Moon, Sun } from 'lucide-vue-next';
+import { Home, Landmark, MapPin, Building, LogOut, Trash2, User, Pencil, Plus, Edit3, Move, Search, BookOpen, Moon, Sun, Crown } from 'lucide-vue-next';
 // ADAUGAT: Inițializăm Router-ul și funcțiile de Autentificare
 const router = useRouter();
 const { user, userRole, logout } = useAuth();
@@ -720,12 +720,13 @@ const adminFormData = ref({
   role_statut: 'Vacant',
 });
 
-// --- VARIABILE PENTRU PARSER AI ---
+// --- VARIABILE PENTRU ROBOT AUTOMATIZARE ---
 const isAiLoading = ref(false);
 const aiStatusText = ref('');
-const aiRawTextContact = ref(''); // Pentru Zona 2 (Contact)
-const aiRawTextRof = ref('');     // Pentru Zona 2 (ROF)
-const aiRawTextHr = ref('');      // Pentru Zona 3 (HR/Salarii)
+const robotUrlContact = ref('');
+const robotUrlRof = ref('');
+const robotUrlHr = ref('');
+const robotUrlSalarii = ref('');
 
 let finColIdCounter = 0; // Contor pentru ID-uri unice de coloane
 // Tabelul de jos (Date Personal)
@@ -2177,192 +2178,107 @@ const handleDeleteAccount = async () => {
   await handleLogout();
 };
 
-// --- FUNCȚII PARSER AI (Momentan fals, pentru testare UI) ---
-const showAiInputs = ref(false);
-const showAiHrInputs = ref(false);
-const runParserZone1 = async () => {
-  const instName = adminFormData.value.nume || adminFormData.value.node_name || selectedAdminNode.value?.label;
-  if (!instName) {
-    alert('Te rog selectează sau creează mai întâi un nod cu un nume.');
+const runDataRobot = async () => {
+  if (!robotUrlContact.value && !robotUrlRof.value && !robotUrlHr.value && !robotUrlSalarii.value) {
+    alert('Te rog introdu cel puțin un link pentru ca Robotul să poată lucra.');
     return;
   }
 
   isAiLoading.value = true;
-  aiStatusText.value = `🤖 Întreb AI-ul despre: ${instName}...`;
+  const nodeName = adminFormData.value.nume || adminFormData.value.node_name || selectedAdminNode.value?.label;
 
   try {
-    const prompt = `Ești un asistent administrativ român. Găsește informațiile oficiale pentru instituția: "${instName}". 
-    Returnează RĂSPUNSUL STRICT într-un format JSON valid, fără text adițional, cu următoarele chei:
-    {
-      "cui": "codul fiscal numeric",
-      "acronim": "acronimul oficial de 2-5 litere sau null dacă nu există",
-      "calitate_bugetara": "una dintre opțiunile: Ordonator principal de credite, Ordonator secundar de credite, Ordonator terțiar de credite, Nu se aplică"
-    }`;
-
-    const response = await fetch('/api/parser', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompt, text: '' })
-    });
-
-    const data = await response.json();
-    if (data.error) throw new Error(data.error);
-
-    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsedData = JSON.parse(aiResult);
-
-    if (parsedData.cui) adminFormData.value.cui = parsedData.cui;
-    if (parsedData.acronim) adminFormData.value.acronim = parsedData.acronim;
-    if (parsedData.calitate_bugetara) adminFormData.value.calitate_bugetara = parsedData.calitate_bugetara;
-
-    aiStatusText.value = '✅ Date generale găsite și completate!';
-    
-  } catch (error) {
-    console.error('Eroare Parser Zona 1:', error);
-    aiStatusText.value = '❌ Eroare: ' + error.message;
-  } finally {
-    isAiLoading.value = false;
-  }
-};
-
-
-const executeZone2 = async () => {
-  if (!aiRawTextContact.value || aiRawTextContact.value.trim().length < 10) {
-    alert('Te rog lipește (Ctrl+V) un text valid în căsuța de mai sus.');
-    return;
-  }
-
-  isAiLoading.value = true;
-  aiStatusText.value = '🤖 AI citește textul și extrage datele...';
-
-  try {
-    // Promptul care spune AI-ului ce să caute în textul tău
-    const prompt = `Ești un asistent administrativ român. Din textul brut de mai jos, extrage informațiile de contact și un rezumat al atribuțiilor (dacă există în text).
-    Returnează RĂSPUNSUL STRICT într-un format JSON valid, fără text adițional, cu următoarele chei:
-    {
-      "adresa": "adresa completă sau null",
-      "telefon": "numerele de telefon sau null",
-      "email": "adresele de email sau null",
-      "website": "site-ul web sau null",
-      "atributii": "un rezumat clar al atribuțiilor sau null"
-    }`;
-
-    const response = await fetch('/api/parser', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompt, text: aiRawTextContact.value })
-    });
-
-    const data = await response.json();
-    if (data.error) throw new Error(data.error);
-
-    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsedData = JSON.parse(aiResult);
-
-    // Injectăm în formular (verifică dacă numele câmpurilor tale sunt exact astea)
-    if (parsedData.adresa) adminFormData.value.adresa = parsedData.adresa;
-    if (parsedData.telefon) adminFormData.value.telefon = parsedData.telefon;
-    if (parsedData.email) adminFormData.value.email = parsedData.email;
-    if (parsedData.website) adminFormData.value.website = parsedData.website;
-    if (parsedData.atributii) adminFormData.value.rol = parsedData.atributii;
-
-    aiStatusText.value = '✅ Date de contact și atribuții extrase cu succes!';
-    showAiInputs.value = false; // Ascundem căsuța după succes
-    aiRawTextContact.value = ''; // O golim
-    
-  } catch (error) {
-    console.error('Eroare Parser Zona 2:', error);
-    aiStatusText.value = '❌ Eroare la extragere: ' + error.message;
-  } finally {
-    isAiLoading.value = false;
-  }
-};
-
-const runParserZone2 = () => {
-  showAiInputs.value = !showAiInputs.value; // Deschide/Închide căsuța de Contact
-  showAiHrInputs.value = false; // Asigură că cealaltă e închisă
-};
-
-const runParserZone3 = () => {
-  showAiHrInputs.value = !showAiHrInputs.value; // Deschide/Închide căsuța HR
-  showAiInputs.value = false; // Asigură că cealaltă e închisă
-};
-
-const executeZone3 = async () => {
-  if (!aiRawTextHr.value || aiRawTextHr.value.trim().length < 10) {
-    alert('Te rog lipește un text valid în căsuța pentru HR.');
-    return;
-  }
-
-  isAiLoading.value = true;
-  aiStatusText.value = '🤖 AI numără posturile și extrage salariile...';
-
-  try {
-    const prompt = `Ești un analist de resurse umane. Din textul brut de mai jos, extrage posturile și salariile.
-    Structura textului: Pe un rând este funcția, pe rândurile următoare este categoria (demnitar, funcție publică) și apoi un număr reprezentând salariul în lei (ex: 24.610 sau 16478).
-    Reguli:
-    1. Ignoră cuvintele "demnitar", "funcție publică", etc.
-    2. Numără posturile (dacă nu se specifică, pune 1).
-    3. Pentru fiecare funcție, găsește numărul care reprezintă salariul (dacă sunt mai multe sume, alege-o pe prima). Curăță numărul de puncte sau virgule (ex: "24.610" devine 24610).
-    4. Returnează RĂSPUNSUL STRICT într-un format JSON valid (array), fără text adițional:
-    [
-      { "functie": "Viceprim-ministru", "ocupate": 1, "vacante": 0, "total": 1, "salariu_baza": 24610 }
-    ]
-    Nu ai voie să lași cheia "salariu_baza" goală. Dacă nu găsești salariul, pune 0.`;
-
-    const response = await fetch('/api/parser', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompt, text: aiRawTextHr.value })
-    });
-
-    const data = await response.json();
-    if (data.error) throw new Error(data.error);
-
-    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    console.log("Răspuns brute AI pt HR:", aiResult);
-
-    const parsedHrData = JSON.parse(aiResult);
-
-    hrRows.value.splice(0); // Golim tabelul
-
-    // Injectăm rândurile primite de la AI
-    parsedHrData.forEach((row, index) => {
-      let dynamicCols = [];
-      
-      if (row.salariu_baza !== null && row.salariu_baza !== undefined) {
-        // Curățăm salariul de eventuale puncte sau text (ex: "24.610" -> 24610)
-        let cleanSalary = String(row.salariu_baza).replace(/[^0-9]/g, '');
-        
-        if (cleanSalary) {
-          dynamicCols.push({
-            // Generăm un ID unic sigur, fără să depindem de contorul global
-            id: 'fin_ai_' + Date.now() + '_' + index, 
-            name: 'Salariu minim - brut',
-            type: 'valoare',
-            value: parseFloat(cleanSalary)
-          });
-        }
-      }
-
-      hrRows.value.push({
-        functie: row.functie || 'N/A',
-        ocupate: row.ocupate || 0,
-        vacante: row.vacante || 0,
-        total: row.total || (row.ocupate + row.vacante),
-        statut: row.ocupate > 0 ? 'Activ' : 'Vacant',
-        finColumns: dynamicCols // Aici bagă coloana cu salariul
+    // 1. Procesăm Linkul de Contact (dacă există)
+    if (robotUrlContact.value) {
+      aiStatusText.value = '🤖 [1/4] Citesc datele de contact...';
+      const res = await fetch('/api/robot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: robotUrlContact.value, type: 'contact' })
       });
-    });
+      const data = await res.json();
+      if (!data.error) {
+        const parsed = JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
+        if (parsed.cui) adminFormData.value.cui = parsed.cui;
+        if (parsed.adresa) adminFormData.value.adresa = parsed.adresa;
+        if (parsed.telefon) adminFormData.value.telefon = parsed.telefon;
+        if (parsed.email) adminFormData.value.email = parsed.email;
+        if (parsed.website) adminFormData.value.website = parsed.website;
+      }
+    }
 
-    aiStatusText.value = `✅ Tabel HR completat cu salarii! Am adăugat ${parsedHrData.length} funcții.`;
-    showAiHrInputs.value = false; 
-    aiRawTextHr.value = ''; 
+    // 2. Procesăm Linkul cu ROF-ul (dacă există)
+    if (robotUrlRof.value) {
+      aiStatusText.value = '🤖 [2/4] Citesc ROF-ul și extrag atribuțiile...';
+      const res = await fetch('/api/robot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: robotUrlRof.value, type: 'rof', nodeName: nodeName })
+      });
+      const data = await res.json();
+      if (!data.error) {
+        const parsed = JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
+        if (parsed.reglementare) adminFormData.value.department_rof = parsed.reglementare;
+        if (parsed.atributii) adminFormData.value.rol = parsed.atributii;
+      }
+    }
+
+    // 3. Procesăm Linkul cu Statul de Funcții (dacă există)
+    if (robotUrlHr.value) {
+      aiStatusText.value = '🤖 [3/4] Citesc Statul de Funcții (HR)...';
+      const res = await fetch('/api/robot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: robotUrlHr.value, type: 'hr' })
+      });
+      const data = await res.json();
+      if (!data.error) {
+        const parsedHr = JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
+        hrRows.value.splice(0); // Golim tabelul
+        parsedHr.forEach(row => {
+          hrRows.value.push({
+            functie: row.functie || 'N/A',
+            ocupate: row.ocupate || 0,
+            vacante: row.vacante || 0,
+            total: row.total || (row.ocupate + row.vacante),
+            statut: row.ocupate > 0 ? 'Activ' : 'Vacant',
+            finColumns: []
+          });
+        });
+      }
+    }
+
+    // 4. Procesăm Linkul cu Salariile (dacă există)
+    if (robotUrlSalarii.value) {
+      aiStatusText.value = '🤖 [4/4] Citesc Centralizatorul Salarial...';
+      const res = await fetch('/api/robot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: robotUrlSalarii.value, type: 'salarii' })
+      });
+      const data = await res.json();
+      if (!data.error) {
+        const parsedSalarii = JSON.parse(data.result.replace(/```json/g, '').replace(/```/g, '').trim());
+        // Asociem salariile cu rândurile HR deja create
+        parsedSalarii.forEach(sal => {
+          const hrRow = hrRows.value.find(r => r.functie.toLowerCase().includes(sal.functie.toLowerCase()));
+          if (hrRow && sal.salariu_baza) {
+            hrRow.finColumns.push({
+              id: 'fin_ai_' + Date.now() + '_' + Math.random(),
+              name: 'Salariu de bază',
+              type: 'valoare',
+              value: parseFloat(sal.salariu_baza)
+            });
+          }
+        });
+      }
+    }
+
+    aiStatusText.value = '✅ Robotul a terminat cu succes! Verifică datele și apasă Salvează.';
     
   } catch (error) {
-    console.error('Eroare Parser Zona 3:', error);
-    aiStatusText.value = '❌ Eroare la construirea tabelului: ' + error.message;
+    console.error('Eroare Robot:', error);
+    aiStatusText.value = '❌ Eroare: ' + error.message;
   } finally {
     isAiLoading.value = false;
   }

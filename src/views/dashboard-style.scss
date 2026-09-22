@@ -2049,3 +2049,22 @@
   flex-shrink: 0;
 }
 
+/* Stil Special pentru Butonul PREMIUM */
+.menu-item.premium-btn .icon { stroke: #64748b; } /* Gri pe normal, la fel ca restul */
+.menu-item.premium-btn .label { color: #475569; } /* Gri pe normal */
+
+.menu-item.premium-btn:hover {
+  background: rgba(250, 204, 21, 0.1); /* Fundal galben foarte subtil la hover */
+  
+  .icon { stroke: #d97706; transform: scale(1.1); } /* Iconița devine aurie */
+  .label { color: #d97706; } /* Textul devine auriu */
+}
+
+/* Dacă ai Dark Mode activat, butonul va fi auriu permanent ca să iasă în evidență */
+.dashboard-container.dark-mode .menu-item.premium-btn .icon { stroke: #facc15; }
+.dashboard-container.dark-mode .menu-item.premium-btn .label { color: #facc15; }
+.dashboard-container.dark-mode .menu-item.premium-btn:hover {
+  background: rgba(250, 204, 21, 0.15);
+}
+
+

@@ -259,6 +259,11 @@
         <span class="label">ACADEMIC</span>
       </div>
 
+                 <div class="menu-item premium-btn" @click="$router.push('/analize')">
+        <Crown class="icon" />
+        <span class="label">PREMIUM</span>
+      </div>
+
       <!-- MODIFICAT: Buton Contul meu (doar pentru utilizator) -->
       <div v-if="userRole === 'utilizator'" class="menu-item account-btn" @click="showAccountMenu = !showAccountMenu">
         <User class="icon" />
@@ -336,56 +341,50 @@
       </div>
  <div v-if="adminAction === 'create' || adminAction === 'edit'" class="new-admin-form">
 
- <!-- === PANOU ASISTENT PARSER AI === -->
+ 
+      <!-- === PANOU ROBOT AUTOMATIZARE === -->
       <div class="ai-parser-panel" style="background: rgba(139, 92, 246, 0.1); border: 1px solid #8b5cf6; border-radius: 12px; padding: 20px; margin-bottom: 25px;">
         <h3 style="color: #a78bfa; font-size: 1.1rem; margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
-          🤖 Asistent Parser AI
+          🤖 Robot Automatizare Date
         </h3>
         
         <div v-if="isAiLoading" style="background: #0f172a; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-family: monospace; font-size: 0.85rem; color: #16a34a;">
-          {{ aiStatusText || 'AI procesează...' }}
+          {{ aiStatusText || 'Robotul procesează...' }}
         </div>
 
-        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+        <div style="display: flex; flex-direction: column; gap: 15px;">
           
-          <!-- ZONA 1 -->
-          <button @click="runParserZone1" style="flex: 1; min-width: 200px; background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">
-            🔎 Zona 1: Date Generale<br>
-            <small style="opacity: 0.8; font-weight: normal;">CUI, Acronim, Ordonator</small>
-          </button>
+          <!-- LINK 1: CONTACT -->
+          <div>
+            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">1. Link Date de Contact / Identitate</label>
+            <input type="text" v-model="robotUrlContact" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box;" placeholder="https://primaria.ro/contact">
+          </div>
+          
+          <!-- LINK 2: ROF -->
+          <div>
+            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">2. Link ROF (Regulament)</label>
+            <input type="text" v-model="robotUrlRof" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box;" placeholder="https://primaria.ro/rof.pdf">
+          </div>
 
-          <!-- ZONA 2 -->
-          <button @click="runParserZone2" style="flex: 1; min-width: 200px; background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">
-            📂 Zona 2: Documente & Contact<br>
-            <small style="opacity: 0.8; font-weight: normal;">ROF, Adresa, Atribuții</small>
-          </button>
+          <!-- LINK 3: STAT FUNCTII -->
+          <div>
+            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">3. Link Stat de Funcții (Posturi)</label>
+            <input type="text" v-model="robotUrlHr" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box;" placeholder="https://primaria.ro/stat-functii">
+          </div>
 
-          <!-- ZONA 3 -->
-          <button @click="runParserZone3" style="flex: 1; min-width: 200px; background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">
-            📊 Zona 3: Tabel HR & Venituri<br>
-            <small style="opacity: 0.8; font-weight: normal;">Stat Funcții, Salarii</small>
-          </button>
+          <!-- LINK 4: SALARII -->
+          <div>
+            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">4. Link Centralizator Salarial</label>
+            <input type="text" v-model="robotUrlSalarii" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px; box-sizing: border-box;" placeholder="https://primaria.ro/salarii">
+          </div>
 
+          <button @click="runDataRobot" style="background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px;">
+            🚀 Rulează Robotul
+          </button>
         </div>
-
-                 <!-- CĂSUȚE ASCUNSE PENTRU TEXT BRUT -->
-            <div v-if="showAiInputs" style="margin-top: 20px; display: flex; flex-direction: column; gap: 15px;">
-              <div>
-                <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Lipește aici textul pentru Contact / ROF / Membri:</label>
-                <textarea v-model="aiRawTextContact" rows="4" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px;" placeholder="Ctrl+V aici..."></textarea>
-              </div>
-              <button @click="executeZone2" style="background: #3b82f6; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: 700;">Extrage Date Contact/ROF</button>
-            </div>
-
-            <div v-if="showAiHrInputs" style="margin-top: 20px; display: flex; flex-direction: column; gap: 15px;">
-              <div>
-                <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Lipește aici textul pentru Statul de Funcții (HR):</label>
-                <textarea v-model="aiRawTextHr" rows="6" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 10px; border-radius: 8px; margin-top: 5px;" placeholder="Copiază aici lista de angajați sau tabelul din PDF..."></textarea>
-              </div>
-              <button @click="executeZone3" style="background: #16a34a; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: 700;">Construiește Tabel HR</button>
-            </div>
       </div>
-      <!-- === SFÂRȘIT PANOU PARSER AI === -->
+      <!-- === SFÂRȘIT PANOU ROBOT === -->
+
 
             <!-- SELECTOR TIP NOD (Comun pentru toate formularele) -->
         <div class="relation-admin-section" style="margin-bottom: 0; padding-bottom: 10px;">
