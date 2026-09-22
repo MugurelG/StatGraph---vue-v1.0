@@ -70,6 +70,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Eroare Robot:', error);
-    return res.status(500).json({ error: error.message });
+    // Afișăm și cauza erorii (ex: DNS, Timeout, SSL)
+    const errMsg = error.cause ? `${error.message} (Cauza: ${error.cause.message || error.cause.code})` : error.message;
+    return res.status(500).json({ error: errMsg });
   }
-}
