@@ -12,14 +12,19 @@ export default async function handler(req, res) {
     const { nodeName, nodeType, files } = req.body;
     
     // 1. Construim mesajul pentru AI
-    let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
+       let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
     Analizezi documentele furnizate pentru entitatea: "${nodeName}" (Tip: ${nodeType}).
 
-    Reguli ABSOLUTE (Anti-Halucinație):
-    1. Pentru Adresă, Telefon, Email, Website, Atribuții, Reglementare, Tabel HR, Salarii: Extrage datele STRICT din documentele furnizate. Dacă nu există, pune "null". ESTE INTERZIS SĂ INVENTEZI.
-    2. Pentru CUI, Acronim, Calitate Bugetară, Cod COR, Bază Legală: Dacă nu le găsești în documente, poți folosi cunoștințele tale generale, dar doar dacă ești 100% sigur. Dacă nu ești sigur, pune "null".
+    Reguli ABSOLUTE:
+    1. Pentru Adresă, Telefon, Email, Website, Atribuții, Reglementare, Tabel HR, Salarii: Extrage datele STRICT din documentele furnizate de utilizator. Dacă nu există în documente, pune "null". ESTE INTERZIS SĂ INVENTEZI.
+    2. Pentru CUI, Bază legală, Cod COR și Calitate Bugetară: ESTE STRICT INTERZIS SĂ FOLOSEȘTI MEMORIA TA INTERNAĂ. Trebuie să efectuezi o căutare pe internet (Web Search) pentru a găsi răspunsul corect și actual.
+       - Pentru CUI: caută pe internet "Care este CUI-ul pentru ${nodeName}".
+       - Pentru Bază legală: caută pe internet "Care este baza legală (Lege/HG) pentru ${nodeName}".
+       - Pentru Cod COR: caută pe internet "Care este codul COR pentru funcția de ${nodeName}".
+       - Pentru Calitate Bugetară: caută pe internet "${nodeName} este ordonator de credite principal, secundar sau terțiar?".
+       Dacă nu găsești răspunsul pe internet, pune "null".
     3. Curăță datele extrase (ex: dacă scrie "Tel: 021.123", pune doar "021.123").
-    4. Returnează RĂSPUNSUL STRICT într-un JSON valid.\n\n`;
+    4. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
     if (nodeType === 'Instituție') {
       prompt += `{ "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0}], "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
