@@ -107,7 +107,16 @@ export default async function handler(req, res) {
 
         const data = await response.json();
 
-        if (!response.ok || (data.error && (data.error.message.includes('unavailable') || data.error.message.includes('high demand') || data.error.message.includes('endpoints')))) {
+              const isRateLimited = data.error && data.error.message && data.error.message.includes('rate limited');
+        const isUnavailable = !response.ok || (data.error && (data.error.message.includes('unavailable') || data.error.message.includes('high demand') || data.error.message.includes('endpoints')));
+
+        if (isRateLimited) {
+          // Dacă suntem limitați de citire PDF, așteptăm 3 secunde și reîncercăm ACELAȘI model
+          lastError = data.error?.message;
+          await new Promise(r => setTimeout(r, 3000)); 
+          continue; 
+        } else if (isUnavailable) {
+          // Dacă modelul e ocupat, trecem la următorul
           lastError = data.error?.message || `Modelul a eșuat`;
           continue; 
         }
