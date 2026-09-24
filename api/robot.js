@@ -26,8 +26,8 @@ export default async function handler(req, res) {
     3. Curăță datele extrase (ex: dacă scrie "Tel: 021.123", pune doar "021.123").
     4. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
-    if (nodeType === 'Instituție') {
-      prompt += `{ "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0}], "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
+       if (nodeType === 'Instituție') {
+      prompt += `{ "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "Toate numerele de telefon găsite, separate prin punct și virgulă (;)", "email": "Toate adresele de email găsite, separate prin punct și virgulă (;)", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0}], "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
     } else if (nodeType === 'Departament' || nodeType === 'Birou') {
       prompt += `{ "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0}], "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
     } else if (nodeType === 'Rol') {
