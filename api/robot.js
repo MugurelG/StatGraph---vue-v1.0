@@ -11,20 +11,21 @@ export default async function handler(req, res) {
   try {
     const { nodeName, nodeType, files } = req.body;
     
-    // 1. Construim mesajul pentru AI
-       let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
+       // 1. Construim mesajul pentru AI (Promptul Definitiv Combinat)
+    let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
     Analizezi documentele furnizate pentru entitatea: "${nodeName}" (Tip: ${nodeType}).
 
-    Reguli ABSOLUTE:
-    1. Pentru Adresă, Telefon, Email, Website, Atribuții, Reglementare, Tabel HR, Salarii: Extrage datele STRICT din documentele furnizate de utilizator. Dacă nu există în documente, pune "null". ESTE INTERZIS SĂ INVENTEZI.
-    2. Pentru CUI, Bază legală, Cod COR și Calitate Bugetară: ESTE STRICT INTERZIS SĂ FOLOSEȘTI MEMORIA TA INTERNAĂ. Trebuie să efectuezi o căutare pe internet (Web Search) pentru a găsi răspunsul corect și actual.
+    Reguli ABSOLUTE (Anti-Halucinație):
+    1. Pentru Adresă, Telefon, Email, Website, Tabel HR, Salarii: Extrage datele STRICT din documentele furnizate de utilizator. Dacă nu există în documente, pune "null". ESTE INTERZIS SĂ INVENTEZI DATE DE CONTACT SAU FINANCIARE.
+    2. Pentru Rol/Atribuții: Fă un rezumat DETALIAT ȘI COMPREHENSIV al tuturor articolelor din ROF care descriu atribuțiile. Nu rezuma doar prima propoziție. Acoperă toate domeniile de competență descrise în document.
+    3. Pentru CUI, Bază legală și Cod COR: ESTE STRICT INTERZIS SĂ FOLOSEȘTI MEMORIA TA INTERNĂ. Trebuie să efectuezi o căutare pe internet (Web Search) pentru a găsi răspunsul corect și actual.
        - Pentru CUI: caută pe internet "Care este CUI-ul pentru ${nodeName}".
        - Pentru Bază legală: caută pe internet "Care este baza legală (Lege/HG) pentru ${nodeName}".
        - Pentru Cod COR: caută pe internet "Care este codul COR pentru funcția de ${nodeName}".
-       - Pentru Calitate Bugetară: caută pe internet "${nodeName} este ordonator de credite principal, secundar sau terțiar?".
        Dacă nu găsești răspunsul pe internet, pune "null".
-    3. Curăță datele extrase (ex: dacă scrie "Tel: 021.123", pune doar "021.123").
-    4. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
+    4. Pentru Calitatea Bugetară: Dacă nu scrie clar în document, deduce logic (ex: un Minister sau o Agenție Națională = "Ordonator principal de credite", o Primărie sau Consiliu Local = "Ordonator terțiar de credite").
+    5. Curăță datele extrase (ex: dacă scrie "Tel: 021.123", pune doar "021.123").
+    6. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
       if (nodeType === 'Instituție') {
       prompt += `{ "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "Toate numerele de telefon găsite, separate prin punct și virgulă (;)", "email": "Toate adresele de email găsite, separate prin punct și virgulă (;)", "website": "Doar domeniul principal (ex: https://www.site.ro), fără calea paginii", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0}], "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
