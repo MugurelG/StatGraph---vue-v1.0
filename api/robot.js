@@ -9,62 +9,96 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { nodeName, nodeType, rawText, files } = req.body;
+    const { nodeName, nodeType, files } = req.body;
     
-    let content = [];
+    // 1. Construim mesajul pentru AI cu Regulile de Extrager (IDP)
+    let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
+    Analizezi documentele furnizate pentru entitatea: "${nodeName}" (Tip: ${nodeType}).
 
-    // 1. Promptul (Același ca înainte)
-    let prompt = `Ești un expert în administrația publică din România. Analizează documentele/textul de mai jos pentru entitatea numită "${nodeName}" (Tip: ${nodeType}).
-    Reguli:
-    1. Extrage datele specifice STRICT din documentele sau textul furnizat.
-    2. Dacă o informație LIPSEȘTE, încearcă să folosești-ți cunoștințele generale (ex: găsește Codul COR).
-    3. Dacă NU EȘTI 100% SIGUR de o informație exactă (ex: CUI, Telefon), returnează "null". ESTE INTERZIS SĂ INVENTEZI DATE.
-    4. Returnează RĂSPUNSUL STRICT într-un JSON valid.\n\n`;
+    Reguli ABSOLUTE (Anti-Halucinație):
+    1. Pentru Adresă, Telefon, Email, Website, Atribuții, Reglementare, Tabel HR, Salarii: Extrage datele STRICT din documentele furnizate. Dacă nu există în documente, pune "null". ESTE INTERZIS SĂ INVENTEZI.
+    2. Pentru CUI, Acronim, Calitate Bugetară, Cod COR, Bază Legală: Dacă nu le găsești în documente, poți folosi cunoștințele tale generale să le generezi, dar doar dacă ești 100% sigur. Dacă nu ești sigur, pune "null".
+    3. Curăță datele extrase (ex: dacă scrie "Tel: 021.123", pune doar "021.123").
+    4. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
     if (nodeType === 'Instituție') {
-      prompt += `{ "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0, "salariu_baza":0}] }`;
+      prompt += `JSON-ul trebuie să aibă exact această structură:
+      {
+        "cui": "număr sau null",
+        "acronim": "scurtare sau null",
+        "calitate_bugetara": "Ordonator principal/secundar/terțiar/Nu se aplică",
+        "adresa": "adresa completă",
+        "telefon": "telefon",
+        "email": "email",
+        "website": "site web",
+        "rol": "rezumatul atribuțiilor generale din ROF",
+        "department_rof": "reglementarea (ex: Hotărârea X/2020)",
+        "hr_rows": [ { "functie": "Nume post", "ocupate": 0, "vacante": 0, "total": 0 } ],
+        "fin_columns_salarii": [ { "functie": "Nume post", "venituri": [ {"name": "Salariu de bază", "type": "valoare", "value": 0}, {"name": "Spor", "type": "procent", "value": 15} ] } ]
+      }`;
     } else if (nodeType === 'Departament' || nodeType === 'Birou') {
-      prompt += `{ "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0, "salariu_baza":0}] }`;
+      prompt += `JSON-ul trebuie să aibă exact această structură:
+      {
+        "department_rof": "Articolul și capitolul din ROF care reglementează acest departament (ex: Cap. II, Art. 15)",
+        "rol": "rezumatul complet al atribuțiilor departamentului din ROF",
+        "hr_rows": [ { "functie": "Nume post", "ocupate": 0, "vacante": 0, "total": 0 } ],
+        "fin_columns_salarii": [ { "functie": "Nume post", "venituri": [ {"name": "Salariu de bază", "type": "valoare", "value": 0} ] } ]
+      }`;
     } else if (nodeType === 'Rol') {
-      prompt += `{ "role_cod_cor": "", "role_baza_legala": "", "role_reglementare": "", "role_gradatie_treapta": "", "rol": "", "fin_columns": [{"name":"Salariu de bază", "type":"valoare", "value":0}] }`;
+      prompt += `JSON-ul trebuie să aibă exact această structură:
+      {
+        "role_cod_cor": "Codul COR din 6 cifre",
+        "role_baza_legala": "Legea sau HG care reglementează funcția",
+        "role_reglementare": "Articolul specific din ROF",
+        "role_gradatie_treapta": "Gradația sau treapta (dacă există)",
+        "rol": "rezumatul complet al atribuțiilor rolului",
+        "fin_columns_salarii": [ { "venituri": [ {"name": "Salariu de bază", "type": "valoare", "value": 0}, {"name": "Spor vechime", "type": "procent", "value": 15} ] } ]
+      }`;
     } else if (nodeType === 'Comisie') {
-      prompt += `{ "department_rof": "", "rol": "", "committee_members": [{"nume":"", "rol_in_comisie":"", "functia_de_baza":""}] }`;
+      prompt += `JSON-ul trebuie să aibă exact această structură:
+      {
+        "department_rof": "Baza legală de înființare a comisiei",
+        "rol": "atribuțiile comisiei",
+        "committee_members": [ { "nume": "Numele persoanei", "rol_in_comisie": "Președinte/Membru", "functia_de_baza": "Funcția din instituție" } ]
+      }`;
     }
 
-    content.push({ type: 'text', text: prompt });
+    // 2. Adăugăm fișierele și textul pentru AI (Format OpenAI Vision)
+    let content = [{ type: 'text', text: prompt }];
 
-    if (files && files.length > 0) {
-      files.forEach(file => {
-        content.push({ type: 'image_url', image_url: { url: `data:${file.mimeType};base64,${file.data}` } });
-      });
-    }
+    // Funcție pentru a adăuga fișierele cu eticheta lor
+    const addFiles = (label, fileList) => {
+      if (fileList && fileList.length > 0) {
+        content.push({ type: 'text', text: `--- DOCUMENTE: ${label.toUpperCase()} ---` });
+        fileList.forEach(file => {
+          content.push({ type: 'image_url', image_url: { url: `data:${file.mimeType};base64,${file.data}` } });
+        });
+      }
+    };
 
-    if (rawText && rawText.trim().length > 0) {
-      content.push({ type: 'text', text: `TEXT BRUT:\n${rawText}` });
-    }
+    addFiles('1. CONTACT', files.contact);
+    addFiles('2. ROF', files.rof);
+    addFiles('3. STAT FUNCTII HR', files.hr);
+    addFiles('4. SALARII', files.salarii);
 
-    // 2. NOU: Căutăm LIVE ce modele gratuite sunt disponibile pe OpenRouter chiar acum!
+    // 3. Căutăm LIVE modele gratuite pe OpenRouter
     const modelsRes = await fetch('https://openrouter.ai/api/v1/models');
     const modelsData = await modelsRes.json();
     
-    // Filtrăm doar modelele gratuite și le prioritizăm pe cele mai bune
-    const priorityKeywords = ['deepseek', 'gemini', 'llama-3.3', 'llama-3.2', 'qwen', 'mistral'];
+    const priorityKeywords = ['gemini-2.0-flash', 'llama-3.3', 'llama-3.2', 'qwen', 'mistral', 'deepseek'];
     let freeModels = modelsData.data.filter(m => m.id.includes(':free')).map(m => m.id);
     
-    // Le sortăm astfel încât cele din lista de priorități să fie încercate primele
     freeModels.sort((a, b) => {
       let aP = priorityKeywords.findIndex(p => a.toLowerCase().includes(p));
       let bP = priorityKeywords.findIndex(p => b.toLowerCase().includes(p));
       return (aP === -1 ? 99 : aP) - (bP === -1 ? 99 : bP);
     });
 
-    if (freeModels.length === 0) {
-      throw new Error("OpenRouter nu are niciun model gratuit disponibil momentan.");
-    }
+    if (freeModels.length === 0) throw new Error("Nu există modele AI gratuite disponibile.");
 
     let lastError = null;
 
-    // 3. Bucla de reîncercare: Încearcă fiecare model gratuit găsit
+    // 4. Bucla de reîncercare pe modele
     for (const model of freeModels) {
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -73,7 +107,7 @@ export default async function handler(req, res) {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': 'https://stat-graph-vue-v1-0.vercel.app',
-            'X-Title': 'Statgraph Robot'
+            'X-Title': 'Statgraph IDP Robot'
           },
           body: JSON.stringify({
             model: model,
@@ -83,13 +117,11 @@ export default async function handler(req, res) {
 
         const data = await response.json();
 
-        // Dacă modelul e ocupat sau indisponibil, trecem la următorul
-        if (!response.ok || (data.error && (data.error.message.includes('unavailable') || data.error.message.includes('high demand') || data.error.message.includes('rate limit') || data.error.message.includes('endpoints')))) {
-          lastError = data.error?.message || `Modelul ${model} a eșuat`;
+        if (!response.ok || (data.error && (data.error.message.includes('unavailable') || data.error.message.includes('high demand') || data.error.message.includes('endpoints')))) {
+          lastError = data.error?.message || `Modelul a eșuat`;
           continue; 
         }
 
-        // Dacă am primit un răspuns valid, îl returnăm
         let aiText = data.choices?.[0]?.message?.content || '';
         if (aiText) {
           aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -101,7 +133,7 @@ export default async function handler(req, res) {
       }
     }
 
-    throw new Error(`Toate modelele AI gratuite sunt momentan indisponibile. Încearcă peste 5 minute. (Ultima eroare: ${lastError})`);
+    throw new Error(`Toate modelele AI gratuite sunt indisponibile. Încearcă peste 5 minute. (Eroare: ${lastError})`);
 
   } catch (error) {
     console.error('Eroare Robot:', error);
