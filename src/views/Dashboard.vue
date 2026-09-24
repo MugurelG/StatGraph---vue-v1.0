@@ -730,6 +730,13 @@ const robotFiles = ref({
   salarii: []
 });
 
+// Funcție simplă de upload
+const handleRobotUpload = (event, type) => {
+  if (event.target.files && event.target.files.length > 0) {
+    robotFiles.value[type] = Array.from(event.target.files);
+  }
+};
+
 // Funcție pentru a reține fișierele încărcate
 const handleRobotFileUpload = (event) => {
   robotFiles.value = Array.from(event.target.files);
@@ -2185,20 +2192,6 @@ const handleDeleteAccount = async () => {
   await handleLogout();
 };
 
-// Funcție ajutătoare pentru a converti fișierele în Base64 (pentru a le trimite la server)
-const fileToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      // Ștergem prefixul "data:application/pdf;base64," ca să rămână doar codul pur
-      const base64String = reader.result.split(',').pop();
-      resolve({ mimeType: file.type, data: base64String });
-    };
-    reader.onerror = error => reject(error);
-  });
-};
-
 // Funcție ajutătoare pentru a converti fișierele în Base64
 const fileToBase64 = (file) => {
   return new Promise((resolve, reject) => {
@@ -2211,7 +2204,6 @@ const fileToBase64 = (file) => {
     reader.onerror = error => reject(error);
   });
 };
-
 const runDataRobot = async () => {
   const hasFiles = robotFiles.value.contact.length > 0 || robotFiles.value.rof.length > 0 || robotFiles.value.hr.length > 0 || robotFiles.value.salarii.length > 0;
   

@@ -342,7 +342,7 @@
  <div v-if="adminAction === 'create' || adminAction === 'edit'" class="new-admin-form">
 
  
-                 <!-- === PANOU ROBOT IDP-RPA (Nou) === -->
+                       <!-- === PANOU ROBOT IDP-RPA (Nou) === -->
       <div class="ai-parser-panel" style="background: rgba(139, 92, 246, 0.1); border: 1px solid #8b5cf6; border-radius: 12px; padding: 20px; margin-bottom: 25px;">
         <h3 style="color: #a78bfa; font-size: 1.1rem; margin: 0 0 5px 0; display: flex; align-items: center; gap: 10px;">
           🤖 Robot Automatizare (IDP-RPA)
@@ -361,28 +361,28 @@
           <!-- Upload 1: Contact -->
           <div>
             <label style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 5px;">1. PDF Contact (Adresă, Tel, CUI)</label>
-            <input type="file" @change="e => robotFiles.contact = Array.from(e.target.files)" accept=".pdf,image/*" 
+            <input type="file" @change="handleRobotUpload($event, 'contact')" accept=".pdf,image/*" 
                    style="width: 100%; background: #0f172a; border: 1px dashed #475569; color: #f1f5f9; padding: 8px; border-radius: 8px; box-sizing: border-box; cursor: pointer; font-size: 0.8rem;">
           </div>
           
           <!-- Upload 2: ROF -->
           <div>
             <label style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 5px;">2. PDF ROF (Atribuții, Reglementări)</label>
-            <input type="file" @change="e => robotFiles.rof = Array.from(e.target.files)" accept=".pdf,image/*" 
+            <input type="file" @change="handleRobotUpload($event, 'rof')" accept=".pdf,image/*" 
                    style="width: 100%; background: #0f172a; border: 1px dashed #475569; color: #f1f5f9; padding: 8px; border-radius: 8px; box-sizing: border-box; cursor: pointer; font-size: 0.8rem;">
           </div>
 
           <!-- Upload 3: HR (Stat Funcții) -->
           <div>
             <label style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 5px;">3. PDF Stat Funcții (Posturi HR)</label>
-            <input type="file" @change="e => robotFiles.hr = Array.from(e.target.files)" accept=".pdf,image/*" 
+            <input type="file" @change="handleRobotUpload($event, 'hr')" accept=".pdf,image/*" 
                    style="width: 100%; background: #0f172a; border: 1px dashed #475569; color: #f1f5f9; padding: 8px; border-radius: 8px; box-sizing: border-box; cursor: pointer; font-size: 0.8rem;">
           </div>
 
           <!-- Upload 4: Salarii -->
           <div>
             <label style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 5px;">4. PDF Salarii (Venituri & Sporuri)</label>
-            <input type="file" @change="e => robotFiles.salarii = Array.from(e.target.files)" accept=".pdf,image/*" 
+            <input type="file" @change="handleRobotUpload($event, 'salarii')" accept=".pdf,image/*" 
                    style="width: 100%; background: #0f172a; border: 1px dashed #475569; color: #f1f5f9; padding: 8px; border-radius: 8px; box-sizing: border-box; cursor: pointer; font-size: 0.8rem;">
           </div>
         </div>
