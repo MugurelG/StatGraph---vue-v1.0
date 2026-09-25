@@ -1052,6 +1052,7 @@ const fetchHrData = async (nodeId) => {
       ocupate: row.pozitii_ocupate || 0,
       vacante: row.pozitii_vacante || 0,
       statut: row.statut || 'Activ',
+       observatii: row.observatii || '',
       finColumns: row.fin_columns || [] // PRELUARE DIN DB (col. fin_columns)
     }));
   } else {
@@ -2286,15 +2287,15 @@ const runDataRobot = async () => {
     if (parsedData.hr_rows && Array.isArray(parsedData.hr_rows) && parsedData.hr_rows.length > 0) {
       hrRows.value.splice(0); // Golim tabelul
       
-      const normalizedRows = parsedData.hr_rows.map(r => ({
+          const normalizedRows = parsedData.hr_rows.map(r => ({
         functie: (r.functie || 'N/A').trim(),
         gradatie: r.gradatie ? String(r.gradatie).trim() : '',
         salariu: r.salariu ? String(r.salariu).trim() : '0',
-        observatie: r.observatie ? String(r.observatie).trim() : '', // <-- AICI PRELUĂM OBSERVAȚIA
+        // Curățăm "null"-ul de la AI:
+        observatie: (r.observatie && r.observatie !== 'null') ? String(r.observatie).trim() : '',
         ocupate: r.ocupate ? parseInt(r.ocupate) : 0,
         vacante: r.vacante ? parseInt(r.vacante) : 0
       }));
-
       // Aflăm ce funcții au gradații DIFERITE
       const functieGradatii = {};
       normalizedRows.forEach(r => {
