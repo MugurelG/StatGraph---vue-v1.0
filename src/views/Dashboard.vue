@@ -403,7 +403,6 @@ const openUserDetails = async (node) => {
               vacante: roleStatus === 'Vacant' ? 1 : 0,
               total: 1,
               statut: roleStatus,
-              observatii: row.observatii || '',
               finColumns: role.metadata?.role_fin_columns || [] 
             });
           });
