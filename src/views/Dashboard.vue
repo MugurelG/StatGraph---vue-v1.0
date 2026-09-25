@@ -2260,50 +2260,51 @@ const runDataRobot = async () => {
 
     // 5. NIVELUL RPA: INJECTĂM datele în formular!
     
-    if (parsedData.cui) adminFormData.value.cui = parsedData.cui;
-    if (parsedData.acronim) adminFormData.value.acronim = parsedData.acronim;
-    if (parsedData.calitate_bugetara) adminFormData.value.calitate_bugetara = parsedData.calitate_bugetara;
-    if (parsedData.adresa) adminFormData.value.adresa = parsedData.adresa;
-    if (parsedData.telefon) adminFormData.value.telefon = parsedData.telefon;
-    if (parsedData.email) adminFormData.value.email = parsedData.email;
-    if (parsedData.website) adminFormData.value.website = parsedData.website;
-    if (parsedData.rol) adminFormData.value.rol = parsedData.rol;
-    if (parsedData.department_rof) adminFormData.value.department_rof = parsedData.department_rof;
+       // Funcție ajutătoare: nu suprascrie cu "null"
+    const cleanVal = (val) => (val && val !== 'null' && val !== 'undefined') ? val : null;
 
-    if (parsedData.role_cod_cor) adminFormData.value.role_cod_cor = parsedData.role_cod_cor;
-    if (parsedData.role_baza_legala) adminFormData.value.role_baza_legala = parsedData.role_baza_legala;
-    if (parsedData.role_reglementare) adminFormData.value.role_reglementare = parsedData.role_reglementare;
-    if (parsedData.role_gradatie_treapta) adminFormData.value.role_gradatie_treapta = parsedData.role_gradatie_treapta;
+    if (cleanVal(parsedData.cui)) adminFormData.value.cui = cleanVal(parsedData.cui);
+    if (cleanVal(parsedData.acronim)) adminFormData.value.acronim = cleanVal(parsedData.acronim);
+    if (cleanVal(parsedData.calitate_bugetara)) adminFormData.value.calitate_bugetara = cleanVal(parsedData.calitate_bugetara);
+    if (cleanVal(parsedData.adresa)) adminFormData.value.adresa = cleanVal(parsedData.adresa);
+    if (cleanVal(parsedData.telefon)) adminFormData.value.telefon = cleanVal(parsedData.telefon);
+    if (cleanVal(parsedData.email)) adminFormData.value.email = cleanVal(parsedData.email);
+    if (cleanVal(parsedData.website)) adminFormData.value.website = cleanVal(parsedData.website);
+    if (cleanVal(parsedData.rol)) adminFormData.value.rol = cleanVal(parsedData.rol);
+    if (cleanVal(parsedData.department_rof)) adminFormData.value.department_rof = cleanVal(parsedData.department_rof);
 
-      // Tabel HR (Instituție / Departament / Birou) - GRUPARE INTELLIGENTA
+    if (cleanVal(parsedData.role_cod_cor)) adminFormData.value.role_cod_cor = cleanVal(parsedData.role_cod_cor);
+    if (cleanVal(parsedData.role_baza_legala)) adminFormData.value.role_baza_legala = cleanVal(parsedData.role_baza_legala);
+    if (cleanVal(parsedData.role_reglementare)) adminFormData.value.role_reglementare = cleanVal(parsedData.role_reglementare);
+    if (cleanVal(parsedData.role_gradatie_treapta)) adminFormData.value.role_gradatie_treapta = cleanVal(parsedData.role_gradatie_treapta);
+
+    // Tabel HR (Grupare Intelligentă)
     if (parsedData.hr_rows && Array.isArray(parsedData.hr_rows) && parsedData.hr_rows.length > 0) {
       hrRows.value.splice(0); // Golim tabelul
       
-      // 1. Normalizăm datele primite de la AI
       const normalizedRows = parsedData.hr_rows.map(r => ({
         functie: (r.functie || 'N/A').trim(),
         gradatie: r.gradatie ? String(r.gradatie).trim() : '',
         salariu: r.salariu ? String(r.salariu).trim() : '0',
-        isVacant: r.statut && r.statut.toLowerCase() === 'vacant'
+        ocupate: r.ocupate ? parseInt(r.ocupate) : 0,
+        vacante: r.vacante ? parseInt(r.vacante) : 0
       }));
 
-      // 2. Aflăm ce funcții au gradații DIFERITE (ca să le putem diferenția)
+      // Aflăm ce funcții au gradații DIFERITE
       const functieGradatii = {};
       normalizedRows.forEach(r => {
         if (!functieGradatii[r.functie]) functieGradatii[r.functie] = new Set();
         if (r.gradatie) functieGradatii[r.functie].add(r.gradatie);
       });
 
-      // 3. Grupăm datele conform regulilor tale
+      // Grupăm datele
       const groups = {};
       normalizedRows.forEach(r => {
         let displayName = r.functie;
-        // Dacă funcția are mai multe gradații, adăugăm "- gradatie X"
         if (functieGradatii[r.functie] && functieGradatii[r.functie].size > 1 && r.gradatie) {
           displayName = `${r.functie} - gradatie ${r.gradatie}`;
         }
         
-        // Cheia de grupare: Numele final + Salariul (ca să separăm salariile diferite)
         const key = `${displayName}___${r.salariu}`;
         
         if (!groups[key]) {
@@ -2313,68 +2314,18 @@ const runDataRobot = async () => {
             vacante: 0,
             total: 0,
             statut: 'Activ',
-            finColumns: []
+            finColumns: [] // AICI ne asigurăm că nu băgăm salarii
           };
         }
         
-        groups[key].total++;
-        if (r.isVacant) {
-          groups[key].vacante++;
-        } else {
-          groups[key].ocupate++;
-        }
+        groups[key].ocupate += r.ocupate;
+        groups[key].vacante += r.vacante;
+        groups[key].total += (r.ocupate + r.vacante);
       });
 
-      // 4. Le introducem în tabelul HR
       Object.values(groups).forEach(group => {
         if (group.vacante > 0 && group.ocupate === 0) group.statut = 'Vacant';
         hrRows.value.push(group);
-      });
-    }
-
-    // Venituri / Salarii pentru Institutie/Departament (cautare dupa functie in tabelul HR)
-    if (parsedData.fin_columns_salarii && Array.isArray(parsedData.fin_columns_salarii)) {
-      parsedData.fin_columns_salarii.forEach(sal => {
-        const hrRow = hrRows.value.find(r => r.functie.toLowerCase().includes(sal.functie.toLowerCase()));
-        if (hrRow && sal.venituri && Array.isArray(sal.venituri)) {
-          sal.venituri.forEach(v => {
-            hrRow.finColumns.push({
-              id: 'fin_ai_' + Date.now() + '_' + Math.random(),
-              name: v.name || 'Venit',
-              type: v.type || 'valoare',
-              value: parseFloat(v.value) || 0
-            });
-          });
-        }
-      });
-    }
-
-    // Coloane Financiare (Doar pentru Rol - se pune direct in roleFinColumns)
-    if (nodeType === 'Rol' && parsedData.fin_columns_salarii && Array.isArray(parsedData.fin_columns_salarii)) {
-      roleFinColumns.value.splice(0);
-      // La Rol, AI-ul returnează un singur obiect cu venituri
-      const rolSalarii = parsedData.fin_columns_salarii[0];
-      if (rolSalarii && rolSalarii.venituri) {
-        rolSalarii.venituri.forEach(v => {
-          roleFinColumns.value.push({
-            id: 'fin_ai_' + Date.now() + '_' + Math.random(),
-            name: v.name || 'Venit',
-            type: v.type || 'valoare',
-            value: parseFloat(v.value) || 0
-          });
-        });
-      }
-    }
-
-    // Membri Comisie
-    if (parsedData.committee_members && Array.isArray(parsedData.committee_members)) {
-      committeeMembers.value.splice(0);
-      parsedData.committee_members.forEach(mem => {
-        committeeMembers.value.push({
-          nume: mem.nume || '',
-          rol_in_comisie: mem.rol_in_comisie || '',
-          functia_de_baza: mem.functia_de_baza || ''
-        });
       });
     }
 

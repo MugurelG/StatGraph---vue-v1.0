@@ -33,14 +33,14 @@ export default async function handler(req, res) {
 
     9. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
-      if (nodeType === 'Instituție') {
-      prompt += `{ "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "Toate numerele de telefon găsite, separate prin punct și virgulă (;)", "email": "Toate adresele de email găsite, separate prin punct și virgulă (;)", "website": "Doar domeniul principal (ex: https://www.site.ro), fără calea paginii", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0}], "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
+       if (nodeType === 'Instituție') {
+      prompt += `Returnează JSON cu structura: { "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }`;
     } else if (nodeType === 'Departament' || nodeType === 'Birou') {
-      prompt += `{ "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0}], "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
+      prompt += `Returnează JSON cu structura: { "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }`;
     } else if (nodeType === 'Rol') {
-      prompt += `{ "role_cod_cor": "", "role_baza_legala": "", "role_reglementare": "", "role_gradatie_treapta": "", "rol": "", "fin_columns_salarii": [{"venituri":[{"name":"", "type":"", "value":0}]}] }`;
+      prompt += `Returnează JSON cu structura: { "role_cod_cor": "", "role_baza_legala": "", "role_reglementare": "", "role_gradatie_treapta": "", "rol": "", "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
     } else if (nodeType === 'Comisie') {
-      prompt += `{ "department_rof": "", "rol": "", "committee_members": [{"nume":"", "rol_in_comisie":"", "functia_de_baza":""}] }`;
+      prompt += `Returnează JSON cu structura: { "department_rof": "", "rol": "", "committee_members": [{"nume":"", "rol_in_comisie":"", "functia_de_baza":""}] }`;
     }
 
     let content = [{ type: 'text', text: prompt }];
