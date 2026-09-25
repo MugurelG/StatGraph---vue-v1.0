@@ -11,11 +11,6 @@ export default async function handler(req, res) {
   try {
     const { nodeName, nodeType, files } = req.body;
     
-     // 1. Construim mesajul pentru AI (Promptul Definitiv Combinat)
-    let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
-    Analizezi documentele furnizate pentru entitatea: "${nodeName}" (Tip: ${nodeType}).
-
-     // 1. Construim mesajul pentru AI (Promptul Definitiv Combinat)
     let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
     Analizezi documentele furnizate pentru entitatea: "${nodeName}" (Tip: ${nodeType}).
 
@@ -38,28 +33,25 @@ export default async function handler(req, res) {
 
     10. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
-       if (nodeType === 'Instituție') {
-      prompt += `Returnează JSON cu structura: { "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }`;
+    if (nodeType === 'Instituție') {
+      prompt += 'Returnează JSON cu structura: { "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }';
     } else if (nodeType === 'Departament' || nodeType === 'Birou') {
-      prompt += `Returnează JSON cu structura: { "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }`;
+      prompt += 'Returnează JSON cu structura: { "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }';
     } else if (nodeType === 'Rol') {
-      prompt += `Returnează JSON cu structura: { "role_cod_cor": "", "role_baza_legala": "", "role_reglementare": "", "role_gradatie_treapta": "", "rol": "", "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
+      prompt += 'Returnează JSON cu structura: { "role_cod_cor": "", "role_baza_legala": "", "role_reglementare": "", "role_gradatie_treapta": "", "rol": "", "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }';
     } else if (nodeType === 'Comisie') {
-      prompt += `Returnează JSON cu structura: { "department_rof": "", "rol": "", "committee_members": [{"nume":"", "rol_in_comisie":"", "functia_de_baza":""}] }`;
+      prompt += 'Returnează JSON cu structura: { "department_rof": "", "rol": "", "committee_members": [{"nume":"", "rol_in_comisie":"", "functia_de_baza":""}] }';
     }
 
     let content = [{ type: 'text', text: prompt }];
 
-    // 2. Adăugăm fișierele (PDF/Imagini) în formatul corect pentru OpenRouter
     const addFiles = (label, fileList) => {
       if (fileList && fileList.length > 0) {
         content.push({ type: 'text', text: `--- DOCUMENTE: ${label.toUpperCase()} ---` });
         fileList.forEach(file => {
           if (file.mimeType === 'application/pdf') {
-            // PDF-urile trebuie trimise ca 'file' în OpenRouter
             content.push({ type: 'file', file: { filename: 'document.pdf', file_data: `data:application/pdf;base64,${file.data}` } });
           } else {
-            // Imaginile ca 'image_url'
             content.push({ type: 'image_url', image_url: { url: `data:${file.mimeType};base64,${file.data}` } });
           }
         });
@@ -71,13 +63,11 @@ export default async function handler(req, res) {
     addFiles('3. STAT FUNCTII HR', files.hr);
     addFiles('4. SALARII', files.salarii);
 
-    // 3. Căutăm LIVE modele gratuite CARE SUPORTĂ IMAGINI (Vision)
     const modelsRes = await fetch('https://openrouter.ai/api/v1/models');
     const modelsData = await modelsRes.json();
     
     const priorityKeywords = ['gemini-2.0-flash', 'llama-3.2-11b-vision', 'llama-3.2-90b-vision', 'qwen-2.5-vl', 'llama-3.3'];
     
-    // Filtrăm doar modelele gratuite care au suport pentru imagini (input_modalities include 'image')
     let freeVisionModels = modelsData.data.filter(m => 
       m.id.includes(':free') && 
       m.architecture && 
@@ -85,22 +75,19 @@ export default async function handler(req, res) {
       m.architecture.input_modalities.includes('image')
     ).map(m => m.id);
     
-    // Le sortăm după priorități
     freeVisionModels.sort((a, b) => {
       let aP = priorityKeywords.findIndex(p => a.toLowerCase().includes(p));
       let bP = priorityKeywords.findIndex(p => b.toLowerCase().includes(p));
       return (aP === -1 ? 99 : aP) - (bP === -1 ? 99 : bP);
     });
 
-    // Dacă nu găsim modele Vision gratuite, cădem înapoi pe orice model gratuit (pentru text)
     if (freeVisionModels.length === 0) {
       let freeTextModels = modelsData.data.filter(m => m.id.includes(':free')).map(m => m.id);
-      freeVisionModels = freeTextModels; // Folosim ce avem
+      freeVisionModels = freeTextModels;
     }
 
     let lastError = null;
 
-    // 4. Bucla de reîncercare
     for (const model of freeVisionModels) {
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -119,16 +106,14 @@ export default async function handler(req, res) {
 
         const data = await response.json();
 
-              const isRateLimited = data.error && data.error.message && data.error.message.includes('rate limited');
+        const isRateLimited = data.error && data.error.message && data.error.message.includes('rate limited');
         const isUnavailable = !response.ok || (data.error && (data.error.message.includes('unavailable') || data.error.message.includes('high demand') || data.error.message.includes('endpoints')));
 
         if (isRateLimited) {
-          // Dacă suntem limitați de citire PDF, așteptăm 3 secunde și reîncercăm ACELAȘI model
           lastError = data.error?.message;
           await new Promise(r => setTimeout(r, 3000)); 
           continue; 
         } else if (isUnavailable) {
-          // Dacă modelul e ocupat, trecem la următorul
           lastError = data.error?.message || `Modelul a eșuat`;
           continue; 
         }
