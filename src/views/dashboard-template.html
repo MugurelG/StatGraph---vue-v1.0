@@ -1431,8 +1431,6 @@
       <!-- COLȚUL DE TRAGERE PENTRU REDIMENSIONARE -->
       <div class="hr-resize-handle" @mousedown.prevent="startHrModalResize"></div>
 
-    </div> <!-- AICI SE ÎNCHIDE hr-modal-container -->
-
 </div> <!-- AICI SE ÎNCHIDE hr-modal-container -->
     <!-- Lightbox Imagine Instituție -->
     <transition name="fade">
@@ -1443,8 +1441,7 @@
         </div>
       </div>
     </transition>
-  </div>
-
+  </div> <!-- AICI SE ÎNCHIDE dashboard-container -->
 <!-- MODAL POP-UP PENTRU ADAUGARE VENIT -->
 <div v-if="openRowDrawer !== null" class="modal-overlay" @click.self="openRowDrawer = null">
   <div class="modal-content">
