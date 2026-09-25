@@ -334,6 +334,7 @@ const openUserDetails = async (node) => {
                   vacante: row.pozitii_vacante || 0,
                   total: (row.pozitii_ocupate || 0) + (row.pozitii_vacante || 0),
                   statut: row.statut || 'Activ',
+                   observatii: row.observatii || '',
                   finColumns: row.fin_columns || [] 
                 }))
               );
@@ -378,6 +379,7 @@ const openUserDetails = async (node) => {
                 vacante: row.vacante || 0,
                 total: (row.ocupate || 0) + (row.vacante || 0),
                 statut: 'Activ',
+                 observatii: row.observatii || '',
                 finColumns: row.finColumns || [] 
               })));
             }
@@ -401,6 +403,7 @@ const openUserDetails = async (node) => {
               vacante: roleStatus === 'Vacant' ? 1 : 0,
               total: 1,
               statut: roleStatus,
+              observatii: row.observatii || '',
               finColumns: role.metadata?.role_fin_columns || [] 
             });
           });

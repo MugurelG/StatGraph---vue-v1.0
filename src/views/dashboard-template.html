@@ -1366,66 +1366,72 @@
       </div>
     </transition>
       
-        <!-- POP-UP TABEL STRUCTURĂ H.R. -->
- <div 
-  v-if="showHrPopup" 
-  class="hr-popup-container hr-modal-container"
-  :style="{ left: hrPopupPos.x + 'px', top: hrPopupPos.y + 'px', width: hrModalSize.width, height: hrModalSize.height }"
-  @mousedown.stop
->
-  <!-- Header pentru Drag -->
-  <div class="hr-modal-header" @mousedown="startHrDrag">
-    <span class="hr-popup-title">Structura H.R.</span>
-    <button class="hr-popup-close" @click="closeHrPopup">✕</button>
-  </div>
+           <!-- POP-UP TABEL STRUCTURĂ H.R. -->
+    <div 
+      v-if="showHrPopup" 
+      class="hr-popup-container hr-modal-container"
+      :style="{ left: hrPopupPos.x + 'px', top: hrPopupPos.y + 'px', width: hrModalSize.width, height: hrModalSize.height }"
+      @mousedown.stop
+    >
+      <!-- Header pentru Drag -->
+      <div class="hr-modal-header" @mousedown="startHrDrag">
+        <span class="hr-popup-title">Structura H.R.</span>
+        <button class="hr-popup-close" @click="closeHrPopup">✕</button>
+      </div>
 
-  <!-- ÎNCEPE ZONA DE SCROLL -->
-  <div class="hr-modal-body">
-    
-    <!-- Tabelul cu date reale (am scos vechiul div hr-popup-body, nu mai e nevoie de el) -->
-       <table class="hr-popup-table">
-      <thead>
-        <tr>
-          <th>Nr. Crt.</th>
-          <th>Denumire Post</th>
-          <th>Ocupate</th>
-          <th>Vacante</th>
-          <th>Total Posturi</th>
-          <th>Statut</th>
-        </tr>
-      </thead>
+      <!-- ÎNCEPE ZONA DE SCROLL -->
+      <div class="hr-modal-body">
+        
+        <!-- Tabelul cu date reale -->
+        <table class="hr-popup-table">
+          <thead>
+            <tr>
+              <th>Nr. Crt.</th>
+              <th>Denumire Post</th>
+              <th>Ocupate</th>
+              <th>Vacante</th>
+              <th>Total Posturi</th>
+              <th>Statut</th>
+              <th>Observații</th> <!-- NOU -->
+            </tr>
+          </thead>
           <tbody>
-        <!-- Folosim noua funcție getDisplayHrRows în loc de userHrData -->
-        <template v-for="(row, index) in getDisplayHrRows" :key="'hr-popup-'+index">
-          
-          <!-- RÂND HEADER -->
-          <tr v-if="row.isHeader" class="td-group-header">
-            <td colspan="6" style="background: #f1f5f9; font-weight: 800; text-align: left; padding: 12px 8px; border-bottom: 2px solid #cbd5e1; color: #1e293b;">
-              🏛️ {{ row.title }}
-            </td>
-          </tr>
+            <!-- Folosim noua funcție getDisplayHrRows în loc de userHrData -->
+            <template v-for="(row, index) in getDisplayHrRows" :key="'hr-popup-'+index">
+              
+              <!-- RÂND HEADER -->
+              <tr v-if="row.isHeader" class="td-group-header">
+                <td colspan="7" style="background: #f1f5f9; font-weight: 800; text-align: left; padding: 12px 8px; border-bottom: 2px solid #cbd5e1; color: #1e293b;">
+                  🏛️ {{ row.title }}
+                </td>
+              </tr>
 
-          <!-- RÂND NORMAL (Posturile HR) -->
-          <tr v-else>
-            <!-- Aici folosim row.displayIndex generat de JS -->
-            <td style="text-align: center;">{{ row.displayIndex }}</td>
-            <td>{{ row.functie || '-' }}</td>
-            <td style="text-align: center;">{{ row.ocupate || 0 }}</td>
-            <td style="text-align: center;">{{ row.vacante || 0 }}</td>
-            <td style="text-align: center;">{{ (row.ocupate || 0) + (row.vacante || 0) }}</td>
-            <td style="text-align: center;">{{ row.statut || '-' }}</td>
-          </tr>
+              <!-- RÂND NORMAL (Posturile HR) -->
+              <tr v-else>
+                <!-- Aici folosim row.displayIndex generat de JS -->
+                <td style="text-align: center;">{{ row.displayIndex }}</td>
+                <td>{{ row.functie || '-' }}</td>
+                <td style="text-align: center;">{{ row.ocupate || 0 }}</td>
+                <td style="text-align: center;">{{ row.vacante || 0 }}</td>
+                <td style="text-align: center;">{{ (row.ocupate || 0) + (row.vacante || 0) }}</td>
+                <td style="text-align: center;">{{ row.statut || '-' }}</td>
+                <td>{{ row.observatii || '-' }}</td> <!-- NOU -->
+              </tr>
 
-        </template>
-      </tbody>
+            </template>
+            
+            <tr v-if="userHrData.length === 0">
+              <td colspan="7" style="text-align:center; color:#94a3b8; padding: 10px;">Nu au fost adăugate posturi</td>
+            </tr>
+          </tbody>
+        </table>
 
+      </div> <!-- AICI SE ÎNCHIDE ZONA DE SCROLL -->
 
-    </table>
+      <!-- COLȚUL DE TRAGERE PENTRU REDIMENSIONARE -->
+      <div class="hr-resize-handle" @mousedown.prevent="startHrModalResize"></div>
 
-  </div> <!-- AICI SE ÎNCHIDE ZONA DE SCROLL -->
-
-  <!-- COLȚUL DE TRAGERE PENTRU REDIMENSIONARE -->
-  <div class="hr-resize-handle" @mousedown.prevent="startHrModalResize"></div>
+    </div> <!-- AICI SE ÎNCHIDE hr-modal-container -->
 
 </div> <!-- AICI SE ÎNCHIDE hr-modal-container -->
     <!-- Lightbox Imagine Instituție -->
