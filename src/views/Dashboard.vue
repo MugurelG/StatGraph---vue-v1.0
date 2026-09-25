@@ -1644,6 +1644,7 @@ const saveAdminNode = async () => {
             salariu_minim: null,
             salariu_maxim: null,
             statut: row.statut,
+             observatii: row.observatii || '',
             fin_columns: row.finColumns || [] // SALVARE COLOANE FINANCIARE
           }));
           const { error: hrErr } = await supabase.from('date_joburi').insert(hrInserts);
@@ -1743,6 +1744,7 @@ const saveAdminNode = async () => {
             salariu_minim: null,
             salariu_maxim: null,
             statut: row.statut,
+            observatii: row.observatii || '',
             fin_columns: row.finColumns || [] // SALVARE COLOANE FINANCIARE
           }));
            const { error: hrErr } = await supabase.from('date_joburi').insert(hrInserts);
