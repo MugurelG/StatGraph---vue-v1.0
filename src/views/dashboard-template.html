@@ -534,6 +534,7 @@
         <th>Vacante</th>
         <th>Total posturi</th>
         <th>Statut</th>
+         <th>Observații</th>
         <!-- COLOANE DINAMICE GENERATE AUTOMAT -->
         <th v-for="col in masterInstFinColumns" :key="col.id" style="min-width: 140px; font-size: 11px;">{{ col.name }}</th>
         <!-- BUTOANE FINAL -->
@@ -550,6 +551,7 @@
     <td class="td-center"><input type="number" v-model.number="row.vacante" min="0" class="clean-input input-sm" :disabled="isSavingNode" /></td>
     <td class="td-center"><input type="number" :value="(row.ocupate || 0) + (row.vacante || 0)" disabled class="clean-input input-sm" /></td>
     <td><input type="text" v-model="row.statut" placeholder="Activ / Link concurs" class="clean-input" :disabled="isSavingNode" /></td>
+    <td><input type="text" v-model="row.observatii" placeholder="-" class="clean-input" :disabled="isSavingNode" /></td>
     
     <!-- UN SINGUR BUTON + VENIT (Deschide Modal-ul) -->
     <td class="td-center td-action">
@@ -579,7 +581,7 @@
 
   <!-- RÂNDUL GOL -->
   <tr v-if="hrRows.length === 0">
-    <td :colspan="8 + masterInstFinColumns.length" style="text-align:center; color:#94a3b8; padding: 20px;">Nu au fost adăugate posturi</td>
+    <td :colspan="9 + masterInstFinColumns.length" style="text-align:center; color:#94a3b8; padding: 20px;">Nu au fost adăugate posturi</td>
   </tr>
 </tbody>
         
