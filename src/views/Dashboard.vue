@@ -2275,18 +2275,60 @@ const runDataRobot = async () => {
     if (parsedData.role_reglementare) adminFormData.value.role_reglementare = parsedData.role_reglementare;
     if (parsedData.role_gradatie_treapta) adminFormData.value.role_gradatie_treapta = parsedData.role_gradatie_treapta;
 
-    // Tabel HR (Instituție / Departament / Birou)
+      // Tabel HR (Instituție / Departament / Birou) - GRUPARE INTELLIGENTA
     if (parsedData.hr_rows && Array.isArray(parsedData.hr_rows) && parsedData.hr_rows.length > 0) {
-      hrRows.value.splice(0);
-      parsedData.hr_rows.forEach(row => {
-        hrRows.value.push({
-          functie: row.functie || 'N/A',
-          ocupate: row.ocupate || 0,
-          vacante: row.vacante || 0,
-          total: row.total || ((row.ocupate || 0) + (row.vacante || 0)),
-          statut: (row.ocupate || 0) > 0 ? 'Activ' : 'Vacant',
-          finColumns: []
-        });
+      hrRows.value.splice(0); // Golim tabelul
+      
+      // 1. Normalizăm datele primite de la AI
+      const normalizedRows = parsedData.hr_rows.map(r => ({
+        functie: (r.functie || 'N/A').trim(),
+        gradatie: r.gradatie ? String(r.gradatie).trim() : '',
+        salariu: r.salariu ? String(r.salariu).trim() : '0',
+        isVacant: r.statut && r.statut.toLowerCase() === 'vacant'
+      }));
+
+      // 2. Aflăm ce funcții au gradații DIFERITE (ca să le putem diferenția)
+      const functieGradatii = {};
+      normalizedRows.forEach(r => {
+        if (!functieGradatii[r.functie]) functieGradatii[r.functie] = new Set();
+        if (r.gradatie) functieGradatii[r.functie].add(r.gradatie);
+      });
+
+      // 3. Grupăm datele conform regulilor tale
+      const groups = {};
+      normalizedRows.forEach(r => {
+        let displayName = r.functie;
+        // Dacă funcția are mai multe gradații, adăugăm "- gradatie X"
+        if (functieGradatii[r.functie] && functieGradatii[r.functie].size > 1 && r.gradatie) {
+          displayName = `${r.functie} - gradatie ${r.gradatie}`;
+        }
+        
+        // Cheia de grupare: Numele final + Salariul (ca să separăm salariile diferite)
+        const key = `${displayName}___${r.salariu}`;
+        
+        if (!groups[key]) {
+          groups[key] = {
+            functie: displayName,
+            ocupate: 0,
+            vacante: 0,
+            total: 0,
+            statut: 'Activ',
+            finColumns: []
+          };
+        }
+        
+        groups[key].total++;
+        if (r.isVacant) {
+          groups[key].vacante++;
+        } else {
+          groups[key].ocupate++;
+        }
+      });
+
+      // 4. Le introducem în tabelul HR
+      Object.values(groups).forEach(group => {
+        if (group.vacante > 0 && group.ocupate === 0) group.statut = 'Vacant';
+        hrRows.value.push(group);
       });
     }
 
