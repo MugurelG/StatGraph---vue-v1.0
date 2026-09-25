@@ -2286,6 +2286,7 @@ const runDataRobot = async () => {
         functie: (r.functie || 'N/A').trim(),
         gradatie: r.gradatie ? String(r.gradatie).trim() : '',
         salariu: r.salariu ? String(r.salariu).trim() : '0',
+        observatie: r.observatie ? String(r.observatie).trim() : '', // <-- AICI PRELUĂM OBSERVAȚIA
         ocupate: r.ocupate ? parseInt(r.ocupate) : 0,
         vacante: r.vacante ? parseInt(r.vacante) : 0
       }));
@@ -2305,7 +2306,8 @@ const runDataRobot = async () => {
           displayName = `${r.functie} - gradatie ${r.gradatie}`;
         }
         
-        const key = `${displayName}___${r.salariu}`;
+               // Cheia de grupare include acum și observația
+        const key = `${displayName}___${r.salariu}___${r.observatie || ''}`;
         
         if (!groups[key]) {
           groups[key] = {
@@ -2314,7 +2316,8 @@ const runDataRobot = async () => {
             vacante: 0,
             total: 0,
             statut: 'Activ',
-            finColumns: [] // AICI ne asigurăm că nu băgăm salarii
+            observatii: r.observatie || '', // Preluăm observația
+            finColumns: []
           };
         }
         

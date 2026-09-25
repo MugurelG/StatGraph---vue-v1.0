@@ -15,6 +15,10 @@ export default async function handler(req, res) {
     let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
     Analizezi documentele furnizate pentru entitatea: "${nodeName}" (Tip: ${nodeType}).
 
+     // 1. Construim mesajul pentru AI (Promptul Definitiv Combinat)
+    let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
+    Analizezi documentele furnizate pentru entitatea: "${nodeName}" (Tip: ${nodeType}).
+
     Reguli ABSOLUTE (Anti-Halucinație):
     1. Pentru Adresă, Telefon, Email, Website, Tabel HR, Salarii: Extrage datele STRICT din documentele furnizate de utilizator. Dacă nu există în documente, pune "null". ESTE INTERZIS SĂ INVENTEZI DATE DE CONTACT SAU FINANCIARE.
     2. Pentru Rol/Atribuții: Fă un rezumat DETALIAT ȘI COMPREHENSIV al tuturor articolelor din ROF care descriu atribuțiile. Nu rezuma doar prima propoziție. Acoperă toate domeniile de competență descrise în document.
@@ -26,17 +30,18 @@ export default async function handler(req, res) {
     4. Pentru Calitatea Bugetară: Dacă nu scrie clar în document, deduce logic (ex: un Minister sau o Agenție Națională = "Ordonator principal de credite", o Primărie sau Consiliu Local = "Ordonator terțiar de credite").
     5. Curăță datele extrase (ex: dacă scrie "Tel: 021.123", pune doar "021.123").
 
-        REGULI PENTRU TABELUL HR (hr_rows):
+    REGULI PENTRU TABELUL HR (hr_rows):
     6. Citește tabelul cu posturi și returnează o listă BRUTĂ cu FIECARE post în parte. NU le grupa.
-    7. Pentru fiecare post, extrage: "functie" (denumirea exactă), "gradatie" (ex: 4, sau null dacă nu are), "salariu" (doar cifra, ex: 9195) și "statut" ("Activ" dacă e ocupat, "Vacant" dacă e liber).
+    7. Pentru fiecare post, extrage: "functie" (denumirea exactă), "gradatie" (ex: 4, sau null dacă nu are), "salariu" (doar cifra, ex: 9195), "observatie" (orice notă specială din tabel, ex: "cfp", "spor handicap", sau null) și "statut" ("Activ" dacă e ocupat, "Vacant" dacă e liber).
     8. Ignoră sporurile și alte indemnizații.
+    9. Dacă posturile au aceeași Funcție și aceeași Gradație, dar Salariu DIFERIT, creează rânduri SEPARATE, cu aceeași denumire de funcție. În câmpul "observatie" pune motivul separării (ex: "cfp", "spor handicap", "indm doctor") sau salariul de bază dacă nu are notă specială.
 
-    9. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
+    10. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
        if (nodeType === 'Instituție') {
-      prompt += `Returnează JSON cu structura: { "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }`;
+      prompt += `Returnează JSON cu structura: { "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }`;
     } else if (nodeType === 'Departament' || nodeType === 'Birou') {
-      prompt += `Returnează JSON cu structura: { "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }`;
+      prompt += `Returnează JSON cu structura: { "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }`;
     } else if (nodeType === 'Rol') {
       prompt += `Returnează JSON cu structura: { "role_cod_cor": "", "role_baza_legala": "", "role_reglementare": "", "role_gradatie_treapta": "", "rol": "", "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
     } else if (nodeType === 'Comisie') {
