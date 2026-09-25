@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   try {
     const { nodeName, nodeType, files } = req.body;
     
-       // 1. Construim mesajul pentru AI (Promptul Definitiv Combinat)
+     // 1. Construim mesajul pentru AI (Promptul Definitiv Combinat)
     let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
     Analizezi documentele furnizate pentru entitatea: "${nodeName}" (Tip: ${nodeType}).
 
@@ -25,7 +25,15 @@ export default async function handler(req, res) {
        Dacă nu găsești răspunsul pe internet, pune "null".
     4. Pentru Calitatea Bugetară: Dacă nu scrie clar în document, deduce logic (ex: un Minister sau o Agenție Națională = "Ordonator principal de credite", o Primărie sau Consiliu Local = "Ordonator terțiar de credite").
     5. Curăță datele extrase (ex: dacă scrie "Tel: 021.123", pune doar "021.123").
-    6. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
+
+    REGULI SPECIALE PENTRU TABELUL HR (hr_rows):
+    6. IGNORĂ complet coloanele cu salarii, sporuri, indemnizații sau alte drepturi salariale. NU include aceste valori în JSON pentru tabelul HR.
+    7. Grupează posturile în rânduri pe baza a 3 elemente: 1. Funcția (Denumirea postului), 2. Gradația, 3. Salariul de bază (folosit DOAR ca criteriu de grupare, nu se afișează).
+    8. Dacă mai multe posturi au aceeași Funcție, aceeași Gradație și același Salariu, grupează-le într-un SINGUR rând (ex: Total posturi = 8, Ocupate = 8, Vacante = 0).
+    9. Dacă posturile au aceeași Funcție și aceeași Gradație, dar Salariu DIFERIT, creează rânduri SEPARATE, cu aceeași denumire de funcție (fără a adăuga nimic suplimentar în nume).
+    10. Dacă posturile au aceeași Funcție, dar Gradație DIFERITĂ, creează rânduri separate și adaugă la denumirea funcției textul " - gradatie [nr]" (ex: "Consilier - gradatie 4").
+
+    11. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
       if (nodeType === 'Instituție') {
       prompt += `{ "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "Toate numerele de telefon găsite, separate prin punct și virgulă (;)", "email": "Toate adresele de email găsite, separate prin punct și virgulă (;)", "website": "Doar domeniul principal (ex: https://www.site.ro), fără calea paginii", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "ocupate":0, "vacante":0, "total":0}], "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }`;
