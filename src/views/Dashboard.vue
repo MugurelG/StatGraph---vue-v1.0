@@ -2283,7 +2283,7 @@ const runDataRobot = async () => {
     if (cleanVal(parsedData.role_reglementare)) adminFormData.value.role_reglementare = cleanVal(parsedData.role_reglementare);
     if (cleanVal(parsedData.role_gradatie_treapta)) adminFormData.value.role_gradatie_treapta = cleanVal(parsedData.role_gradatie_treapta);
 
-       // Verificăm dacă utilizatorul a încărcat fișierul de Salarii
+           // Verificăm dacă utilizatorul a încărcat fișierul de Salarii
     const hasSalariiFile = robotFiles.value.salarii.length > 0;
 
     // Tabel HR (Grupare Intelligentă)
@@ -2293,8 +2293,9 @@ const runDataRobot = async () => {
       const normalizedRows = parsedData.hr_rows.map(r => ({
         functie: (r.functie || 'N/A').trim(),
         gradatie: r.gradatie ? String(r.gradatie).trim() : '',
-        // Dacă avem fișier de salarii, păstrăm salariul. Dacă nu, îl setăm pe 0 (ca să fie ignorat)
-        salariu: (hasSalariiFile && r.salariu) ? String(r.salariu).trim() : '0',
+        // Păstrăm salariul de bază pentru grupare
+        salariu: (hasSalariiFile && r.salariu_baza) ? String(r.salariu_baza).trim() : '0',
+        venituri: r.venituri || [], // Preluăm array-ul de venituri
         observatie: (r.observatie && r.observatie !== 'null') ? String(r.observatie).trim() : '',
         ocupate: r.ocupate ? parseInt(r.ocupate) : 0,
         vacante: r.vacante ? parseInt(r.vacante) : 0
@@ -2319,13 +2320,18 @@ const runDataRobot = async () => {
         
         if (!groups[key]) {
           let dynamicCols = [];
-          // Dacă avem salariu valid, îl adăugăm ca și coloană financiară (efectul butonului +Venit)
-          if (hasSalariiFile && r.salariu && r.salariu !== '0' && !isNaN(r.salariu)) {
-            dynamicCols.push({
-              id: 'fin_ai_' + Date.now() + '_' + Math.random(),
-              name: 'Salariu de bază',
-              type: 'valoare',
-              value: parseFloat(r.salariu)
+          
+          // Dacă avem fișier de salarii, preluăm TOATE veniturile din array
+          if (hasSalariiFile && r.venituri && Array.isArray(r.venituri)) {
+            r.venituri.forEach(v => {
+              if (v.name && v.value) {
+                dynamicCols.push({
+                  id: 'fin_ai_' + Date.now() + '_' + Math.random(),
+                  name: v.name, // Ex: "Salariu de bază - brut", "Spor condiții vătămătoare - brut"
+                  type: 'valoare',
+                  value: parseFloat(v.value) || 0
+                });
+              }
             });
           }
           
@@ -2336,7 +2342,7 @@ const runDataRobot = async () => {
             total: 0,
             statut: 'Activ',
             observatii: r.observatie || '',
-            finColumns: dynamicCols // Aici băgăm salariul
+            finColumns: dynamicCols // Aici băgăm TOATE drepturile financiare
           };
         }
         

@@ -26,17 +26,18 @@ export default async function handler(req, res) {
     5. Curăță datele extrase (ex: dacă scrie "Tel: 021.123", pune doar "021.123").
 
     REGULI PENTRU TABELUL HR (hr_rows):
+     REGULI PENTRU TABELUL HR (hr_rows):
     6. Citește tabelul cu posturi și returnează o listă BRUTĂ cu FIECARE post în parte. NU le grupa.
-    7. Pentru fiecare post, extrage: "functie" (denumirea exactă), "gradatie" (ex: 4, sau null dacă nu are), "salariu" (doar cifra, ex: 9195), "observatie" (orice notă specială din tabel, ex: "cfp", "spor handicap", sau null) și "statut" ("Activ" dacă e ocupat, "Vacant" dacă e liber).
-    8. Ignoră sporurile și alte indemnizații.
+    7. Pentru fiecare post, extrage: "functie" (denumirea exactă), "gradatie" (număr sau null), "salariu_baza" (doar cifra, pentru referință), "observatie" (ex: majorare 40%, sau null) și "statut" ("Activ" dacă e ocupat, "Vacant" dacă e liber).
+    8. IMPORTANT DREPTURI FINANCIARE: Extrage un array numit "venituri" care conține TOATE drepturile financiare ale postului (salariu de bază, sporuri, indemnizații). Fiecare venit trebuie să aibă "name" (ex: "Salariu de bază - brut", "Spor condiții vătămătoare - brut") și "value" (doar cifra, ex: 300). Dacă nu are alte drepturi, array-ul va conține doar salariul de bază.
     9. Dacă posturile au aceeași Funcție și aceeași Gradație, dar Salariu DIFERIT, creează rânduri SEPARATE, cu aceeași denumire de funcție. În câmpul "observatie" pune motivul separării (ex: "cfp", "spor handicap", "indm doctor") sau salariul de bază dacă nu are notă specială.
 
     10. Returnează RĂSPUNSUL STRICT într-un JSON valid, fără text adițional.\n\n`;
 
-    if (nodeType === 'Instituție') {
-      prompt += 'Returnează JSON cu structura: { "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }';
+       if (nodeType === 'Instituție') {
+      prompt += 'Returnează JSON cu structura: { "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu_baza":"", "venituri":[{"name":"", "value":0}], "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }';
     } else if (nodeType === 'Departament' || nodeType === 'Birou') {
-      prompt += 'Returnează JSON cu structura: { "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu":"", "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }';
+      prompt += 'Returnează JSON cu structura: { "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu_baza":"", "venituri":[{"name":"", "value":0}], "observatie":"", "ocupate":1, "vacante":0}], "fin_columns_salarii": [] }';
     } else if (nodeType === 'Rol') {
       prompt += 'Returnează JSON cu structura: { "role_cod_cor": "", "role_baza_legala": "", "role_reglementare": "", "role_gradatie_treapta": "", "rol": "", "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }';
     } else if (nodeType === 'Comisie') {
