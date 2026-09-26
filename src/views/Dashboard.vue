@@ -2283,19 +2283,23 @@ const runDataRobot = async () => {
     if (cleanVal(parsedData.role_reglementare)) adminFormData.value.role_reglementare = cleanVal(parsedData.role_reglementare);
     if (cleanVal(parsedData.role_gradatie_treapta)) adminFormData.value.role_gradatie_treapta = cleanVal(parsedData.role_gradatie_treapta);
 
+       // Verificăm dacă utilizatorul a încărcat fișierul de Salarii
+    const hasSalariiFile = robotFiles.value.salarii.length > 0;
+
     // Tabel HR (Grupare Intelligentă)
     if (parsedData.hr_rows && Array.isArray(parsedData.hr_rows) && parsedData.hr_rows.length > 0) {
       hrRows.value.splice(0); // Golim tabelul
       
-          const normalizedRows = parsedData.hr_rows.map(r => ({
+      const normalizedRows = parsedData.hr_rows.map(r => ({
         functie: (r.functie || 'N/A').trim(),
         gradatie: r.gradatie ? String(r.gradatie).trim() : '',
-        salariu: r.salariu ? String(r.salariu).trim() : '0',
-        // Curățăm "null"-ul de la AI:
+        // Dacă avem fișier de salarii, păstrăm salariul. Dacă nu, îl setăm pe 0 (ca să fie ignorat)
+        salariu: (hasSalariiFile && r.salariu) ? String(r.salariu).trim() : '0',
         observatie: (r.observatie && r.observatie !== 'null') ? String(r.observatie).trim() : '',
         ocupate: r.ocupate ? parseInt(r.ocupate) : 0,
         vacante: r.vacante ? parseInt(r.vacante) : 0
       }));
+
       // Aflăm ce funcții au gradații DIFERITE
       const functieGradatii = {};
       normalizedRows.forEach(r => {
@@ -2311,18 +2315,28 @@ const runDataRobot = async () => {
           displayName = `${r.functie} - gradatie ${r.gradatie}`;
         }
         
-               // Cheia de grupare include acum și observația
         const key = `${displayName}___${r.salariu}___${r.observatie || ''}`;
         
         if (!groups[key]) {
+          let dynamicCols = [];
+          // Dacă avem salariu valid, îl adăugăm ca și coloană financiară (efectul butonului +Venit)
+          if (hasSalariiFile && r.salariu && r.salariu !== '0' && !isNaN(r.salariu)) {
+            dynamicCols.push({
+              id: 'fin_ai_' + Date.now() + '_' + Math.random(),
+              name: 'Salariu de bază',
+              type: 'valoare',
+              value: parseFloat(r.salariu)
+            });
+          }
+          
           groups[key] = {
             functie: displayName,
             ocupate: 0,
             vacante: 0,
             total: 0,
             statut: 'Activ',
-            observatii: r.observatie || '', // Preluăm observația
-            finColumns: []
+            observatii: r.observatie || '',
+            finColumns: dynamicCols // Aici băgăm salariul
           };
         }
         
