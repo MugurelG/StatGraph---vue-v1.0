@@ -204,6 +204,31 @@ const tipSelectat = ref(null);
 const localitateSelectata = ref(null);
 const currentView = ref('flow');
 const navigationStack = ref([]);
+// --- SPOTLIGHT SEARCH ---
+const nodeSearchTerm = ref('');
+
+watch(nodeSearchTerm, (newTerm) => {
+  const term = newTerm.toLowerCase().trim();
+  
+  elements.value.forEach(el => {
+    if (el.source && el.target) return; // Sărim peste edge-uri (linii)
+    
+    // Curățăm clasele vechi de spotlight
+    let classes = (el.class || '').replace(' spotlight-match', '').replace(' spotlight-dim', '');
+    
+    if (term !== '') {
+      const label = (el.label || '').toLowerCase();
+      if (label.includes(term)) {
+        classes += ' spotlight-match';
+      } else {
+        classes += ' spotlight-dim';
+      }
+    }
+    
+    // Actualizăm clasa nodului (necesar pentru reactivitatea Vue Flow)
+    el.class = classes;
+  });
+});
 const currentContextType = ref('national'); // Ține minte ce context afișăm
 const showAccountMenu = ref(false);
 const showAuthModal = ref(false);
