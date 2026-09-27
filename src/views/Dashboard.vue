@@ -2378,7 +2378,7 @@ const injectManualJson = () => {
 
   try {
     let cleanJson = manualJsonInput.value.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsedData = JSON.parse(cleanJson);
+    let parsedData = JSON.parse(cleanJson);
 
     if (Array.isArray(parsedData)) {
       parsedData = { hr_rows: parsedData };
