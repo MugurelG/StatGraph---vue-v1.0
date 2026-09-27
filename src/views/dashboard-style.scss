@@ -2100,8 +2100,8 @@
 .vue-flow__node.spotlight-match .custom-node-container {
   outline: 4px solid #facc15 !important; /* Contur galben strălucitor */
   outline-offset: 4px;
-  transform: scale(1.05); # Le facem puțin mai mari
-  box-shadow: 0 0 20px rgba(250, 204, 21, 0.6) !important; # Aură galbenă
+  transform: scale(1.05); /* Le facem puțin mai mari */
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.6) !important; /* Aură galbenă */
   transition: all 0.2s ease;
 }
 
@@ -2110,8 +2110,8 @@
   z-index: 1 !important;
 }
 .vue-flow__node.spotlight-dim .custom-node-container {
-  opacity: 0.2 !important; # Le facem transparente
-  filter: grayscale(100%); # Le scoatem culoarea
+  opacity: 0.2 !important; /* Le facem transparente */
+  filter: grayscale(100%); /* Le scoatem culoarea */
   transform: scale(0.95);
   transition: all 0.2s ease;
 }
@@ -2120,4 +2120,3 @@
 .vue-flow__node.spotlight-dim .details-badge {
   opacity: 0.5 !important;
 }
-
