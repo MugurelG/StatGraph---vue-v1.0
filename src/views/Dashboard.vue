@@ -732,6 +732,8 @@ const robotFiles = ref({
   salarii: []
 });
 
+const manualJsonInput = ref('');
+
 // Funcție simplă de upload
 const handleRobotUpload = (event, type) => {
   if (event.target.files && event.target.files.length > 0) {
@@ -2365,6 +2367,97 @@ const runDataRobot = async () => {
     alert('Eroare Robot: ' + error.message);
   } finally {
     isAiLoading.value = false;
+  }
+};
+
+const injectManualJson = () => {
+  if (!manualJsonInput.value || manualJsonInput.value.trim().length < 10) {
+    alert('Te rog lipește un JSON valid.');
+    return;
+  }
+
+  try {
+    let cleanJson = manualJsonInput.value.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedData = JSON.parse(cleanJson);
+
+    if (Array.isArray(parsedData)) {
+      parsedData = { hr_rows: parsedData };
+    }
+
+    const hasSalariiFile = parsedData.hr_rows.some(r => r.venituri && r.venituri.length > 0);
+    
+    if (parsedData.hr_rows && Array.isArray(parsedData.hr_rows) && parsedData.hr_rows.length > 0) {
+      hrRows.value.splice(0);
+      
+      const normalizedRows = parsedData.hr_rows.map(r => ({
+        functie: (r.functie || 'N/A').trim(),
+        gradatie: r.gradatie ? String(r.gradatie).trim() : '',
+        salariu: (hasSalariiFile && r.salariu_baza) ? String(r.salariu_baza).trim() : '0',
+        venituri: r.venituri || [],
+        observatie: (r.observatie && r.observatie !== 'null') ? String(r.observatie).trim() : '',
+        ocupate: r.ocupate ? parseInt(r.ocupate) : 1,
+        vacante: r.vacante ? parseInt(r.vacante) : 0
+      }));
+
+      const functieGradatii = {};
+      normalizedRows.forEach(r => {
+        if (!functieGradatii[r.functie]) functieGradatii[r.functie] = new Set();
+        if (r.gradatie) functieGradatii[r.functie].add(r.gradatie);
+      });
+
+      const groups = {};
+      normalizedRows.forEach(r => {
+        let displayName = r.functie;
+        if (functieGradatii[r.functie] && functieGradatii[r.functie].size > 1 && r.gradatie) {
+          displayName = `${r.functie} - gradatie ${r.gradatie}`;
+        }
+        
+        const key = `${displayName}___${r.salariu}___${r.observatie || ''}`;
+        
+        if (!groups[key]) {
+          let dynamicCols = [];
+          if (hasSalariiFile && r.venituri && Array.isArray(r.venituri)) {
+            r.venituri.forEach(v => {
+              if (v.name && v.value) {
+                dynamicCols.push({
+                  id: 'fin_manual_' + Date.now() + '_' + Math.random(),
+                  name: v.name,
+                  type: 'valoare',
+                  value: parseFloat(v.value) || 0
+                });
+              }
+            });
+          }
+          
+          groups[key] = {
+            functie: displayName,
+            ocupate: 0,
+            vacante: 0,
+            total: 0,
+            statut: 'Activ',
+            observatii: r.observatie || '',
+            finColumns: dynamicCols
+          };
+        }
+        
+        groups[key].ocupate += r.ocupate;
+        groups[key].vacante += r.vacante;
+        groups[key].total += (r.ocupate + r.vacante);
+      });
+
+      Object.values(groups).forEach(group => {
+        if (group.vacante > 0 && group.ocupate === 0) group.statut = 'Vacant';
+        hrRows.value.push(group);
+      });
+
+      manualJsonInput.value = ''; 
+      alert('Succes! Datele au fost injectate în tabel.');
+    } else {
+      alert('JSON-ul nu conține rânduri valide.');
+    }
+  } catch (error) {
+    console.error('Eroare parsare JSON:', error);
+    alert('Eroare: JSON invalid. Verifică formatul.');
   }
 };
 </script>

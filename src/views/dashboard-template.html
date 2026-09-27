@@ -393,6 +393,16 @@
           <span v-else>⏳ Robotul lucrează... Așteaptă.</span>
         </button>
       </div>
+          <div style="margin-top: 20px; border-top: 1px dashed #475569; padding-top: 15px;">
+          <label style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 5px;">5. Injectează JSON procesat (Ocolește Timeout)</label>
+          <textarea v-model="manualJsonInput" rows="3" 
+                    style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 8px; border-radius: 8px; box-sizing: border-box; font-family: monospace; font-size: 0.75rem;" 
+                    placeholder='Lipește aici JSON-ul obținut de la AI...'></textarea>
+          <button @click="injectManualJson" 
+                  style="background: #059669; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px; width: 100%;">
+            ⚡ Injectează în Formular
+          </button>
+        </div>
       <!-- === SFÂRȘIT PANOU ROBOT === -->
 
             <!-- SELECTOR TIP NOD (Comun pentru toate formularele) -->
