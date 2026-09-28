@@ -2265,15 +2265,16 @@ const runDataRobot = async () => {
       salarii: await Promise.all(robotFiles.value.salarii.map(f => fileToBase64(f)))
     };
 
-        // 3. Trimitem către Supabase Edge Function (Noul Creier)
+         // 3. Trimitem către Supabase Edge Function (Noul Creier)
     aiStatusText.value = '🚀 Robotul citește documentele și extrage datele...';
     const supabaseUrl = 'https://qskddruzamdgobplaipr.supabase.co/functions/v1/ai-robot';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFza2RkcnV6YW1kZ29icGxhaXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3Njk5ODIsImV4cCI6MjA5NzM0NTk4Mn0.aA4ctt711QKHsNo5B14wSVbic_n_0vQJy0SIylyF13M'; // Înlocuiește cu cheia ta anon de la Supabase
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFza2RkcnV6YW1kZ29icGxhaXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3Njk5ODIsImV4cCI6MjA5NzM0NTk4Mn0.aA4ctt711QKHsNo5B14wSVbic_n_0vQJy0SIylyF13M';
     
     const res = await fetch(supabaseUrl, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
+        'apikey': supabaseAnonKey, // Necesar pentru securitatea Supabase
         'Authorization': `Bearer ${supabaseAnonKey}` // Necesar pentru securitatea Supabase
       },
       body: JSON.stringify({
