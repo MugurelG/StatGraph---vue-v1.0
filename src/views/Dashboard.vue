@@ -2236,19 +2236,19 @@ const fileToBase64 = (file) => {
     reader.onerror = error => reject(error);
   });
 };
+
 const runDataRobot = async () => {
   const hasFiles = robotFiles.value.contact.length > 0 || robotFiles.value.rof.length > 0 || robotFiles.value.hr.length > 0 || robotFiles.value.salarii.length > 0;
   
   if (!hasFiles) {
-    alert('Te rog încarcă cel puțin un PDF sau o imagine în una din cele 4 căsuțe.');
+    alert('Te rog încarcă cel puțin un PDF sau o imagine.');
     return;
   }
 
   isAiLoading.value = true;
-  aiStatusText.value = '📂 Transform fișierele pentru AI... (Acest pas poate dura 10-20 secunde)';
+  aiStatusText.value = '📂 Pregătesc fișierele pentru AI...';
 
   try {
-    // 1. Determinăm tipul nodului curent
     let nodeType = 'Rol';
     if (adminFormData.value.is_institution) nodeType = 'Instituție';
     else if (adminFormData.value.is_department) nodeType = 'Departament';
@@ -2257,7 +2257,6 @@ const runDataRobot = async () => {
 
     const nodeName = adminFormData.value.nume || adminFormData.value.node_name || selectedAdminNode.value?.label;
 
-    // 2. Transformăm TOATE fișierele în Base64, păstrându-le pe categorii
     const base64Files = {
       contact: await Promise.all(robotFiles.value.contact.map(f => fileToBase64(f))),
       rof: await Promise.all(robotFiles.value.rof.map(f => fileToBase64(f))),
@@ -2265,41 +2264,122 @@ const runDataRobot = async () => {
       salarii: await Promise.all(robotFiles.value.salarii.map(f => fileToBase64(f)))
     };
 
-         // 3. Trimitem către Supabase Edge Function (Noul Creier)
-    aiStatusText.value = '🚀 Robotul citește documentele și extrage datele...';
-    const supabaseUrl = 'https://qskddruzamdgobplaipr.supabase.co/functions/v1/ai-robot';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFza2RkcnV6YW1kZ29icGxhaXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3Njk5ODIsImV4cCI6MjA5NzM0NTk4Mn0.aA4ctt711QKHsNo5B14wSVbic_n_0vQJy0SIylyF13M';
-    
-    const res = await fetch(supabaseUrl, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'apikey': supabaseAnonKey, // Necesar pentru securitatea Supabase
-        'Authorization': `Bearer ${supabaseAnonKey}` // Necesar pentru securitatea Supabase
-      },
-      body: JSON.stringify({
-        nodeName: nodeName,
-        nodeType: nodeType,
-        files: base64Files
-      })
-    });
+    // 1. Construim Promptul
+    let prompt = `Ești un motor IDP (Intelligent Document Processing) pentru administrația publică din România.
+    Analizezi documentele furnizate pentru entitatea: "${nodeName}" (Tip: ${nodeType}).
+    Reguli ABSOLUTE (Anti-Halucinație):
+    1. Pentru Adresă, Telefon, Email, Website, Tabel HR, Salarii: Extrage datele STRICT din documentele furnizate. Dacă nu există, pune "null". ESTE INTERZIS SĂ INVENTEZI.
+    2. Pentru Rol/Atribuții: Fă un rezumat DETALIAT ȘI COMPREHENSIV al tuturor articolelor din ROF. 
+    3. Pentru CUI, Bază legală și Cod COR: Efectuează o căutare pe internet. Dacă nu găsești, pune "null".
+    4. Pentru Calitatea Bugetară: Dacă nu scrie clar, deduce logic (Minister = Principal, Primărie = Terțiar).
+    5. Curăță datele extrase.
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => null);
-      throw new Error(errData?.error || `Eroare server. Cod: ${res.status}`);
+    REGULI PENTRU TABELUL HR (hr_rows):
+    6. Returnează o listă BRUTĂ cu FIECARE post. NU le grupa.
+    7. Extrage: "functie", "gradatie", "salariu_baza", "venituri" (array cu "name" si "value", adaugă "- brut"), "observatie" și "statut".
+    8. Dacă posturile au aceeași Funcție și Gradație, dar Salariu DIFERIT, creează rânduri SEPARATE.
+
+    9. Returnează RĂSPUNSUL STRICT într-un JSON valid.\n\n`;
+
+    if (nodeType === 'Instituție') {
+      prompt += '{ "cui": "", "acronim": "", "calitate_bugetara": "", "adresa": "", "telefon": "", "email": "", "website": "", "rol": "", "department_rof": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu_baza":"", "venituri":[{"name":"", "value":0}], "observatie":"", "ocupate":1, "vacante":0}] }';
+    } else if (nodeType === 'Departament' || nodeType === 'Birou') {
+      prompt += '{ "department_rof": "", "rol": "", "hr_rows": [{"functie":"", "gradatie":"", "salariu_baza":"", "venituri":[{"name":"", "value":0}], "observatie":"", "ocupate":1, "vacante":0}] }';
+    } else if (nodeType === 'Rol') {
+      prompt += '{ "role_cod_cor": "", "role_baza_legala": "", "role_reglementare": "", "role_gradatie_treapta": "", "rol": "", "fin_columns_salarii": [{"functie":"", "venituri":[{"name":"", "type":"", "value":0}]}] }';
+    } else if (nodeType === 'Comisie') {
+      prompt += '{ "department_rof": "", "rol": "", "committee_members": [{"nume":"", "rol_in_comisie":"", "functia_de_baza":""}] }';
     }
 
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    let content = [{ type: 'text', text: prompt }];
 
-    // 4. Curățăm și parsează răspunsul AI-ului
-    let aiResult = data.result.replace(/```json/g, '').replace(/```/g, '').trim();
-    console.log("Răspuns Brut AI:", aiResult); 
-    const parsedData = JSON.parse(aiResult);
+    const addFiles = (label, fileList) => {
+      if (fileList && fileList.length > 0) {
+        content.push({ type: 'text', text: `--- DOCUMENTE: ${label.toUpperCase()} ---` });
+        fileList.forEach(file => {
+          if (file.mimeType === 'application/pdf') {
+            content.push({ type: 'file', file: { filename: 'document.pdf', file_data: `data:application/pdf;base64,${file.data}` } });
+          } else {
+            content.push({ type: 'image_url', image_url: { url: `data:${file.mimeType};base64,${file.data}` } });
+          }
+        });
+      }
+    };
 
-    // 5. NIVELUL RPA: INJECTĂM datele în formular!
+    addFiles('1. CONTACT', base64Files.contact);
+    addFiles('2. ROF', base64Files.rof);
+    addFiles('3. STAT FUNCTII HR', base64Files.hr);
+    addFiles('4. SALARII', base64Files.salarii);
+
+    // 2. Apel Direct din Browser către OpenRouter (Fără Vercel/Supabase)
+    aiStatusText.value = '🚀 Robotul citește documentele direct din browser... (Acest pas poate dura 1-2 minute)';
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
     
-       // Funcție ajutătoare: nu suprascrie cu "null"
+       // Căutăm LIVE ce modele gratuite care pot citi imagini/PDF-uri sunt disponibile fix în acest moment!
+    const modelsRes = await fetch('https://openrouter.ai/api/v1/models');
+    const modelsData = await modelsRes.json();
+    
+    const priorityKeywords = ['gemini-2.0-flash', 'llama-3.3', 'llama-3.2-11b-vision', 'llama-3.2-90b-vision', 'qwen-2.5-vl'];
+    
+    let freeModels = modelsData.data.filter(m => 
+      m.id.includes(':free') && 
+      m.architecture && 
+      m.architecture.input_modalities && 
+      m.architecture.input_modalities.includes('image')
+    ).map(m => m.id);
+    
+    // Le sortăm ca să încercăm mereu cele mai deștepte primele
+    freeModels.sort((a, b) => {
+      let aP = priorityKeywords.findIndex(p => a.toLowerCase().includes(p));
+      let bP = priorityKeywords.findIndex(p => b.toLowerCase().includes(p));
+      return (aP === -1 ? 99 : aP) - (bP === -1 ? 99 : bP);
+    });
+
+    if (freeModels.length === 0) {
+      throw new Error("OpenRouter nu are niciun model gratuit disponibil momentan.");
+    }
+
+    let lastError = null;
+    let parsedData = null;
+
+    for (const model of freeModels) {
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://stat-graph-vue-v1-0.vercel.app',
+            'X-Title': 'Statgraph IDP Robot'
+          },
+          body: JSON.stringify({ model, messages: [{ role: 'user', content }] })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          lastError = data.error?.message || `Modelul a eșuat`;
+          continue; // Trecem la următorul model
+        }
+
+        let aiText = data.choices?.[0]?.message?.content || '';
+        if (aiText) {
+          aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
+          console.log("Răspuns Brut AI:", aiText);
+          parsedData = JSON.parse(aiText);
+          break; // Am primit răspuns valid, ieșim din buclă!
+        }
+
+      } catch (err) {
+        lastError = err.message;
+      }
+    }
+
+    if (!parsedData) {
+      throw new Error(`Toate modelele AI au eșuat. Eroare: ${lastError}`);
+    }
+
+    // 3. INJECTĂM datele în formular
     const cleanVal = (val) => (val && val !== 'null' && val !== 'undefined') ? val : null;
 
     if (cleanVal(parsedData.cui)) adminFormData.value.cui = cleanVal(parsedData.cui);
@@ -2317,69 +2397,55 @@ const runDataRobot = async () => {
     if (cleanVal(parsedData.role_reglementare)) adminFormData.value.role_reglementare = cleanVal(parsedData.role_reglementare);
     if (cleanVal(parsedData.role_gradatie_treapta)) adminFormData.value.role_gradatie_treapta = cleanVal(parsedData.role_gradatie_treapta);
 
-           // Verificăm dacă utilizatorul a încărcat fișierul de Salarii
-    const hasSalariiFile = robotFiles.value.salarii.length > 0;
-
-    // Tabel HR (Grupare Intelligentă)
+    // Tabel HR
     if (parsedData.hr_rows && Array.isArray(parsedData.hr_rows) && parsedData.hr_rows.length > 0) {
-      hrRows.value.splice(0); // Golim tabelul
+      hrRows.value.splice(0);
+      const hasSalariiFile = robotFiles.value.salarii.length > 0;
       
       const normalizedRows = parsedData.hr_rows.map(r => ({
         functie: (r.functie || 'N/A').trim(),
         gradatie: r.gradatie ? String(r.gradatie).trim() : '',
-        // Păstrăm salariul de bază pentru grupare
         salariu: (hasSalariiFile && r.salariu_baza) ? String(r.salariu_baza).trim() : '0',
-        venituri: r.venituri || [], // Preluăm array-ul de venituri
+        venituri: r.venituri || [],
         observatie: (r.observatie && r.observatie !== 'null') ? String(r.observatie).trim() : '',
         ocupate: r.ocupate ? parseInt(r.ocupate) : 0,
         vacante: r.vacante ? parseInt(r.vacante) : 0
       }));
 
-      // Aflăm ce funcții au gradații DIFERITE
       const functieGradatii = {};
       normalizedRows.forEach(r => {
         if (!functieGradatii[r.functie]) functieGradatii[r.functie] = new Set();
         if (r.gradatie) functieGradatii[r.functie].add(r.gradatie);
       });
 
-      // Grupăm datele
       const groups = {};
       normalizedRows.forEach(r => {
         let displayName = r.functie;
         if (functieGradatii[r.functie] && functieGradatii[r.functie].size > 1 && r.gradatie) {
           displayName = `${r.functie} - gradatie ${r.gradatie}`;
         }
-        
         const key = `${displayName}___${r.salariu}___${r.observatie || ''}`;
-        
         if (!groups[key]) {
           let dynamicCols = [];
-          
-          // Dacă avem fișier de salarii, preluăm TOATE veniturile din array
           if (hasSalariiFile && r.venituri && Array.isArray(r.venituri)) {
             r.venituri.forEach(v => {
               if (v.name && v.value) {
                 dynamicCols.push({
                   id: 'fin_ai_' + Date.now() + '_' + Math.random(),
-                  name: v.name, // Ex: "Salariu de bază - brut", "Spor condiții vătămătoare - brut"
+                  name: v.name,
                   type: 'valoare',
                   value: parseFloat(v.value) || 0
                 });
               }
             });
           }
-          
           groups[key] = {
             functie: displayName,
-            ocupate: 0,
-            vacante: 0,
-            total: 0,
-            statut: 'Activ',
+            ocupate: 0, vacante: 0, total: 0, statut: 'Activ',
             observatii: r.observatie || '',
-            finColumns: dynamicCols // Aici băgăm TOATE drepturile financiare
+            finColumns: dynamicCols
           };
         }
-        
         groups[key].ocupate += r.ocupate;
         groups[key].vacante += r.vacante;
         groups[key].total += (r.ocupate + r.vacante);
