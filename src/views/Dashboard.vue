@@ -748,6 +748,7 @@ const adminFormData = ref({
    is_institution: true,
    is_department: false,
    calitate_bugetara: '',
+   hr_unavailable: false,
    department_angajati: 0,
   department_rof: '',
   // Câmpuri specifice ROL
@@ -769,6 +770,7 @@ const robotFiles = ref({
 });
 
 const manualJsonInput = ref('');
+const bulkJsonInput = ref('');
 
 // Funcție simplă de upload
 const handleRobotUpload = (event, type) => {
@@ -1548,6 +1550,7 @@ const handleAdminEdit = async () => {
     // Preluare date specifice DEPARTAMENT din metadata
     adminFormData.value.department_rof = nodeData.metadata?.rof || '';
      adminFormData.value.calitate_bugetara = nodeData.metadata?.calitate_bugetara || '';
+     adminFormData.value.hr_unavailable = nodeData.metadata?.hr_unavailable || false;
     
           if (nodeData.metadata?.hr_departament && Array.isArray(nodeData.metadata.hr_departament)) {
       departmentHrRows.value = nodeData.metadata.hr_departament.map(h => ({
@@ -1757,6 +1760,7 @@ const saveAdminNode = async () => {
             rof: adminFormData.value.department_rof,
             hr_departament: departmentHrRows.value,
         calitate_bugetara: adminFormData.value.calitate_bugetara,
+        hr_unavailable: adminFormData.value.hr_unavailable || false,
         committee_members: committeeMembers.value,
           },
                     is_institution: adminFormData.value.is_institution,
@@ -1854,6 +1858,7 @@ const saveAdminNode = async () => {
               hr_departament: departmentHrRows.value,
               // Salvare date INSTITUȚIE
               calitate_bugetara: adminFormData.value.calitate_bugetara,
+              hr_unavailable: adminFormData.value.hr_unavailable || false,
                committee_members: committeeMembers.value,
             }, 
           };
@@ -2028,7 +2033,7 @@ function buildElements(list, rootId) {
     label: rootNode.nume || rootNode.node_name,
     position: { x: 0, y: 0 }, 
     class: rootClass, // Am scos fade-in is-visible de aici
-    data: { subCount: rootSubCount, imagine: rootNode.metadata?.imagine || null, animDelay: '0ms' },
+        data: { subCount: rootSubCount, imagine: rootNode.metadata?.imagine || null, animDelay: '0ms', hr_unavailable: rootNode.metadata?.hr_unavailable || false },
     style: { width: '270px', height: '60px' }
   });
 
@@ -2042,11 +2047,12 @@ function buildElements(list, rootId) {
         label: child.nume || child.node_name,
         position: { x: 0, y: 150 }, 
         class: childClass, // Am scos fade-in is-visible de aici
-        data: { 
+              data: { 
           subCount: childSubCount, 
           imagine: child.metadata?.imagine || null, 
-          animDelay: `${index * 50}ms` // <-- AICI E MAGIA: Întârzierea de 50ms înmulțită cu indexul
-        }, 
+          animDelay: `${index * 50}ms`,
+          hr_unavailable: child.metadata?.hr_unavailable || false 
+        },  
         style: { width: '270px', height: '60px' }
       });
 
@@ -2567,6 +2573,78 @@ const injectManualJson = () => {
   } catch (error) {
     console.error('Eroare parsare JSON:', error);
     alert('Eroare: JSON invalid. Verifică formatul.');
+  }
+};
+const injectBulkJson = async () => {
+  if (!bulkJsonInput.value || bulkJsonInput.value.trim().length < 10) {
+    alert('Te rog lipește un JSON valid pentru popularea masivă.');
+    return;
+  }
+
+  isAiLoading.value = true;
+  aiStatusText.value = '🚀 Actualizez nodurile în baza de date...';
+
+  try {
+    let cleanJson = bulkJsonInput.value.replace(/```json/g, '').replace(/```/g, '').trim();
+    const bulkData = JSON.parse(cleanJson);
+
+    if (!Array.isArray(bulkData)) {
+      throw new Error('JSON-ul trebuie să fie un array (o listă) de obiecte.');
+    }
+
+    let updatedCount = 0;
+    let notFoundCount = 0;
+
+    for (const item of bulkData) {
+      const nodeName = (item.nume_nod || item.nume || '').trim();
+      if (!nodeName) continue;
+
+      // 1. Căutăm nodul în lista locală după nume
+      const localNode = allNodesList.value.find(n => 
+        (n.nume || n.node_name || '').trim().toLowerCase() === nodeName.toLowerCase()
+      );
+
+      if (localNode) {
+        // 2. Pregătim noile date de metadata
+        const newMetadata = {
+          ...(localNode.metadata || {}),
+          rol: item.rol || localNode.rol || '',
+          department_rof: item.department_rof || item.reglementare || localNode.metadata?.department_rof || ''
+        };
+
+        // 3. Facem UPDATE în Supabase
+        const { error } = await supabase
+          .from('organograms')
+          .update({ 
+            metadata: newMetadata,
+            rol: item.rol || localNode.rol || ''
+          })
+          .eq('id', localNode.id);
+
+        if (!error) {
+          // 4. Actualizăm și local în graf ca să se vadă imediat
+          localNode.metadata = newMetadata;
+          localNode.rol = item.rol || localNode.rol || '';
+          updatedCount++;
+        } else {
+          console.error(`Eroare la salvarea nodului ${nodeName}:`, error.message);
+        }
+      } else {
+        console.warn(`Nodul "${nodeName}" nu a fost găsit în organigramă.`);
+        notFoundCount++;
+      }
+    }
+
+    aiStatusText.value = `✅ Populare finalizată! ${updatedCount} noduri actualizate. ${notFoundCount > 0 ? `(${notFoundCount} negăsite)` : ''}`;
+    bulkJsonInput.value = ''; // Curățăm căsuța
+    alert(`Succes! ${updatedCount} noduri au fost populate cu atribuții.`);
+
+  } catch (error) {
+    console.error('Eroare Parsare JSON Masiv:', error);
+    aiStatusText.value = '❌ Eroare: ' + error.message;
+    alert('Eroare: JSON invalid. Verifică formatul.');
+  } finally {
+    isAiLoading.value = false;
   }
 };
 </script>

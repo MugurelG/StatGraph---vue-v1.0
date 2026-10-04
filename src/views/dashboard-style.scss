@@ -2120,3 +2120,76 @@
 .vue-flow__node.spotlight-dim .details-badge {
   opacity: 0.5 !important;
 }
+
+/* INSIGNĂ DATE HR INDISPONIBILE (Triunghi Galben 3D cu Tooltip Custom) */
+.hr-unavailable-badge {
+  position: absolute;
+  bottom: -16px; /* Pe latura de jos */
+  left: 50%;     /* La mijloc */
+  transform: translateX(-50%);
+  z-index: 15;
+  cursor: help;
+  display: flex;
+  justify-content: center;
+}
+
+/* Triunghiul Galben */
+.hr-unavailable-badge::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-bottom: 22px solid #facc15;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
+  transition: filter 0.2s;
+}
+
+/* Semnul de exclamare negru */
+.hr-unavailable-badge::after {
+  content: '!';
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 900;
+  color: #000;
+  pointer-events: none; /* Să nu blocheze hover-ul pe triunghi */
+}
+
+/* Tooltip-ul customizat (Mesajul) */
+.hr-tooltip-text {
+  visibility: hidden;
+  width: 200px;
+  background-color: #1e293b;
+  color: #f1f5f9;
+  text-align: center;
+  border-radius: 8px;
+  padding: 8px;
+  position: absolute;
+  z-index: 20;
+  bottom: 30px; /* Apare deasupra triunghiului */
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  opacity: 0;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  border: 1px solid #334155;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  pointer-events: none;
+  white-space: normal;
+}
+
+/* Când pui mouse-ul pe insignă, afișăm mesajul */
+.hr-unavailable-badge:hover .hr-tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Efect de strălucire la hover pe triunghi */
+.hr-unavailable-badge:hover::before {
+  filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.8));
+}

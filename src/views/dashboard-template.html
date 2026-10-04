@@ -162,6 +162,13 @@
               >
                 D
               </div>
+               <!-- NOUA INSIGNĂ: DATE HR INDISPONIBILE -->
+                 <div 
+                v-if="nodeProps.data?.hr_unavailable" 
+                class="hr-unavailable-badge" 
+              >
+                <span class="hr-tooltip-text">Institutia nu a publicat pe site-ul propriu informatiile privind posturile si veniturile financiare.</span>
+              </div>
             </div>
           </template>
         </VueFlow>
@@ -393,22 +400,36 @@
           </div>
         </div>
 
-        <button @click="runDataRobot" :disabled="isAiLoading" 
+              <button @click="runDataRobot" :disabled="isAiLoading" 
                 style="background: #8A00C4; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 15px; width: 100%;">
           <span v-if="!isAiLoading">🚀 Rulează Robotul (Extragere & Completare)</span>
           <span v-else>⏳ Robotul lucrează... Așteaptă.</span>
         </button>
       </div>
-          <div style="margin-top: 20px; border-top: 1px dashed #475569; padding-top: 15px;">
-          <label style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 5px;">5. Injectează JSON procesat (Ocolește Timeout)</label>
-          <textarea v-model="manualJsonInput" rows="3" 
-                    style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 8px; border-radius: 8px; box-sizing: border-box; font-family: monospace; font-size: 0.75rem;" 
-                    placeholder='Lipește aici JSON-ul obținut de la AI...'></textarea>
-          <button @click="injectManualJson" 
-                  style="background: #059669; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px; width: 100%;">
-            ⚡ Injectează în Formular
-          </button>
-        </div>
+
+      <div style="margin-top: 20px; border-top: 1px dashed #475569; padding-top: 15px;">
+        <label style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 5px;">5. Injectează JSON procesat (Ocolește Timeout)</label>
+        <textarea v-model="manualJsonInput" rows="3" 
+                  style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 8px; border-radius: 8px; box-sizing: border-box; font-family: monospace; font-size: 0.75rem;" 
+                  placeholder='Lipește aici JSON-ul obținut de la AI...'></textarea>
+        <button @click="injectManualJson" 
+                style="background: #059669; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px; width: 100%;">
+          ⚡ Injectează în Formular
+        </button>
+      </div>
+
+      <!-- NOU: POPULARE MASIVĂ -->
+      <div style="margin-top: 20px; border-top: 1px dashed #475569; padding-top: 15px;">
+        <label style="font-size: 0.75rem; color: #f59e0b; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 5px;">6. Populare Masivă (Toate Nodurile)</label>
+        <textarea v-model="bulkJsonInput" rows="3" 
+                  style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #f1f5f9; padding: 8px; border-radius: 8px; box-sizing: border-box; font-family: monospace; font-size: 0.75rem;" 
+                  placeholder='Lipește aici JSON-ul multiplu primit de la AI...'></textarea>
+        <button @click="injectBulkJson" 
+                style="background: #f59e0b; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 10px; width: 100%;">
+          ⚡ Populează Atribuțiile pentru Toate Nodurile
+        </button>
+      </div>
+
       <!-- === SFÂRȘIT PANOU ROBOT === -->
 
             <!-- SELECTOR TIP NOD (Comun pentru toate formularele) -->
@@ -499,6 +520,14 @@
           </select>
         </div>
 
+
+        <!-- SECȚIUNEA: DATE HR INDISPONIBILE -->
+        <div class="relation-admin-section" style="flex-direction: row; align-items: center; gap: 10px;">
+          <input type="checkbox" v-model="adminFormData.hr_unavailable" id="hr_unavailable" style="width: 18px; height: 18px; cursor: pointer;" />
+          <label for="hr_unavailable" style="font-size: 0.85rem; color: #dc2626; font-weight: 600; cursor: pointer; margin: 0;">
+            Date HR/Salarii indisponibile (nu se afișează tabelul)
+          </label>
+        </div>
 
 
         <!-- SECȚIUNEA: RELAȚII INSTITUȚIONALE -->
