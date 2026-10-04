@@ -2593,19 +2593,25 @@ const injectBulkJson = async () => {
     }
 
     const cleanName = (str) => (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-
-    // Identificăm ID-ul rădăcinii curente (Instituția pe care o vizualizezi pe ecran)
     const currentRootStr = String(currentRootId.value);
 
-    // Funcție care verifică dacă un nod este copil/nepot al rădăcinii curente
+    // Creăm un Map pentru căutare ultra-rapidă O(1) și evităm blocarea browserului
+    const nodeMap = new Map(allNodesList.value.map(n => [String(n.id), n]));
+
+    // Funcție anti-blocare: folosim un Set 'visited' ca să evităm buclele infinite
     const isInCurrentTree = (node) => {
-      if (String(node.id) === currentRootStr) return true;
-      let currentId = node.parent_id ? String(node.parent_id) : null;
+      let currentId = String(node.id);
+      const visited = new Set();
+      
       while (currentId) {
-        if (currentId === currentRootStr) return true;
-        const parent = allNodesList.value.find(n => String(n.id) === currentId);
-        if (!parent) return false;
-        currentId = parent.parent_id ? String(parent.parent_id) : null;
+        if (currentId === currentRootStr) return true; // Am găsit rădăcina curentă
+        if (visited.has(currentId)) return false; // Anti-buclă infinită
+        visited.add(currentId);
+        
+        const n = nodeMap.get(currentId);
+        if (!n || !n.parent_id) return false; // Am ajuns la capăt fără să găsim rădăcina
+        
+        currentId = String(n.parent_id);
       }
       return false;
     };
