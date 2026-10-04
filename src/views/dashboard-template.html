@@ -1138,18 +1138,18 @@
     </transition>
 
 
-       <!-- PANOU PROFIL DEPARTAMENT -->
+        <!-- PANOU PROFIL DEPARTAMENT / BIROU -->
     <transition name="slide-panel">
       <div v-if="showDepartmentPanel" class="panel-left">
         <div class="panel-header">
-          <h1>Profil Departament</h1>
+          <h1>{{ selectedDepartmentData?.is_office ? 'Profil Birou' : 'Profil Departament' }}</h1>
           <button class="panel-close-btn" @click="closeDepartmentPanel">✕</button>
         </div>
         
         <div class="panel-body" id="department-profile-pdf-section">
           <!-- 1. Identitate Departament -->
           <div class="profile-section" v-if="selectedDepartmentData">
-            <div class="section-title">Identitate Departament</div>
+            <div class="section-title">{{ selectedDepartmentData?.is_office ? 'Identitate Birou' : 'Identitate Departament' }}</div>
             <div class="contact-grid">
               <span class="c-label">Denumire departament</span> <div class="c-value">{{ selectedDepartmentData.node_name || selectedDepartmentData.nume || '-' }}</div>
               <span class="c-label">Referință reglementare</span> <div class="c-value">{{ selectedDepartmentData.metadata?.rof || '-' }}</div>
@@ -1159,7 +1159,7 @@
 
           <!-- 2. Rol Departament -->
           <div class="profile-section" v-if="selectedDepartmentData">
-            <div class="section-title">Rol Departament</div>
+            <div class="section-title">{{ selectedDepartmentData?.is_office ? 'Rol Birou' : 'Rol Departament' }}</div>
             <p style="font-size: 0.9rem; color: #334155; line-height: 1.6; margin: 0;">
               {{ selectedDepartmentData.rol || 'Nu există descriere disponibilă.' }}
             </p>

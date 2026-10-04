@@ -286,7 +286,7 @@ const openUserDetails = async (node) => {
             userSourceData.value = [];
           }
 
-    // 1. Extragem ID-urile tuturor copiilor (departamente + roluri) direct din lista încărcată în graf
+                             // 1. Extragem ID-urile tuturor copiilor (departamente + roluri) direct din lista încărcată în graf
           const childNodeIds = allNodesList.value
             .filter(n => String(n.institutie_id) === String(node.id))
             .map(n => String(n.id));
@@ -435,28 +435,17 @@ const openUserDetails = async (node) => {
           userHrData.value = combinedHrData;
         }
         };
-  
-
-  const handleDetailsClick = (node) => {
+       const handleDetailsClick = (node) => {
   const nodeData = allNodesList.value.find(n => String(n.id) === String(node.id));
   
   if (nodeData && nodeData.is_committee) {
-    // CASA PENTRU COMISII
+    // CASA NOUĂ: Pentru Comisii
     selectedCommitteeData.value = nodeData;
     showCommitteePanel.value = true;
     showProfilePanel.value = false;
     showDepartmentPanel.value = false;
     showRolePanel.value = false;
   } else if (nodeData && nodeData.is_department) {
-    // CASA PENTRU DEPARTAMENTE
-    selectedDepartmentData.value = nodeData;
-    departmentProfileHrData.value = nodeData.metadata?.hr_departament || [];
-    showDepartmentPanel.value = true;
-    showProfilePanel.value = false;
-    showRolePanel.value = false;
-    showCommitteePanel.value = false;
-  } else if (nodeData && nodeData.is_office) {
-    // CASA NOUĂ PENTRU BIRouri (Folosește același panou ca Departamentul)
     selectedDepartmentData.value = nodeData;
     departmentProfileHrData.value = nodeData.metadata?.hr_departament || [];
     showDepartmentPanel.value = true;
@@ -464,14 +453,12 @@ const openUserDetails = async (node) => {
     showRolePanel.value = false;
     showCommitteePanel.value = false;
   } else if (nodeData && nodeData.is_institution === false) {
-    // CASA PENTRU ROLURI
     selectedRoleData.value = nodeData;
     showRolePanel.value = true;
     showProfilePanel.value = false;
     showDepartmentPanel.value = false;
     showCommitteePanel.value = false;
   } else {
-    // CASA PENTRU INSTITUȚII
     openUserDetails(node);
     showDepartmentPanel.value = false;
     showRolePanel.value = false;
@@ -719,18 +706,20 @@ const exportCommitteePDF = () => {
   
   document.body.appendChild(wrapper);
 
-   const opt = { 
-      margin: [10, 10, 10, 10], 
-      filename: `Profil_${selectedDepartmentData.value?.is_office ? 'Birou' : 'Departament'}_${selectedDepartmentData.value?.node_name || selectedDepartmentData.value?.nume || 'structura'}.pdf`, 
-      image: { type: 'jpeg', quality: 0.98 }, 
-      html2canvas: { scale: 2, useCORS: true }, 
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
+  const opt = { 
+    margin: [10, 10, 10, 10], 
+    filename: `Profil_Consiliu_${selectedCommitteeData.value?.node_name || selectedCommitteeData.value?.nume || 'comisie'}.pdf`, 
+    image: { type: 'jpeg', quality: 0.98 }, 
+    html2canvas: { scale: 2, useCORS: true }, 
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
 
   html2pdf().set(opt).from(clonedElement).save().finally(() => {
     document.body.removeChild(wrapper);
   });
 };
+
 const adminAction = ref(null); // 'create', 'edit', sau null
 const adminFormData = ref({
   nume: '', 
@@ -980,7 +969,7 @@ const getDeptNodeFinTotal = () => {
   let grandTotal = 0;
   departmentHrRows.value.forEach(row => { grandTotal += calculateDeptRowTotal(row); });
   return grandTotal;
-}; 
+};
 
 // --- GENERARE AUTOMATĂ CAPETE DE TABEL (COMPUTED) ---
 
