@@ -2592,8 +2592,23 @@ const injectBulkJson = async () => {
       throw new Error('JSON-ul trebuie să fie un array (o listă) de obiecte.');
     }
 
-    // Funcție locală pentru a curăța numele (fără diacritice, fără spații extra, litere mici)
     const cleanName = (str) => (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+    // Identificăm ID-ul rădăcinii curente (Instituția pe care o vizualizezi pe ecran)
+    const currentRootStr = String(currentRootId.value);
+
+    // Funcție care verifică dacă un nod este copil/nepot al rădăcinii curente
+    const isInCurrentTree = (node) => {
+      if (String(node.id) === currentRootStr) return true;
+      let currentId = node.parent_id ? String(node.parent_id) : null;
+      while (currentId) {
+        if (currentId === currentRootStr) return true;
+        const parent = allNodesList.value.find(n => String(n.id) === currentId);
+        if (!parent) return false;
+        currentId = parent.parent_id ? String(parent.parent_id) : null;
+      }
+      return false;
+    };
 
     let updatedCount = 0;
     let notFoundNames = [];
@@ -2602,10 +2617,9 @@ const injectBulkJson = async () => {
       const jsonName = cleanName(item.nume_nod || item.nume);
       if (!jsonName) continue;
 
-      // 1. Căutăm TOATE nodurile folosind numele curățat
+      // 1. Căutăm nodurile DOAR în sub-arborele curent
       const localNodes = allNodesList.value.filter(n => {
-        const dbNodeName = n.nume || n.node_name || '';
-        return cleanName(dbNodeName) === jsonName;
+        return isInCurrentTree(n) && cleanName(n.nume || n.node_name) === jsonName;
       });
 
       if (localNodes.length > 0) {
@@ -2647,7 +2661,7 @@ const injectBulkJson = async () => {
     bulkJsonInput.value = ''; 
     
     if (notFoundNames.length > 0) {
-      alert(`Succes! ${updatedCount} noduri actualizate.\n\nATENȚIE: Următoarele ${notFoundNames.length} noduri NU au fost găsite în baza de date:\n- ${notFoundNames.join('\n- ')}`);
+      alert(`Succes! ${updatedCount} noduri actualizate.\n\nATENȚIE: Următoarele ${notFoundNames.length} noduri NU au fost găsite în sub-arborele curent:\n- ${notFoundNames.join('\n- ')}`);
     } else {
       alert(`Succes! ${updatedCount} noduri au fost populate cu atribuții.`);
     }
