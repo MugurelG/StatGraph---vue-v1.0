@@ -2592,52 +2592,65 @@ const injectBulkJson = async () => {
       throw new Error('JSON-ul trebuie să fie un array (o listă) de obiecte.');
     }
 
+    // Funcție locală pentru a curăța numele (fără diacritice, fără spații extra, litere mici)
+    const cleanName = (str) => (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
     let updatedCount = 0;
-    let notFoundCount = 0;
+    let notFoundNames = [];
 
     for (const item of bulkData) {
-      const nodeName = (item.nume_nod || item.nume || '').trim();
-      if (!nodeName) continue;
+      const jsonName = cleanName(item.nume_nod || item.nume);
+      if (!jsonName) continue;
 
-      // 1. Căutăm nodul în lista locală după nume
-      const localNode = allNodesList.value.find(n => 
-        (n.nume || n.node_name || '').trim().toLowerCase() === nodeName.toLowerCase()
-      );
+      // 1. Căutăm TOATE nodurile folosind numele curățat
+      const localNodes = allNodesList.value.filter(n => {
+        const dbNodeName = n.nume || n.node_name || '';
+        return cleanName(dbNodeName) === jsonName;
+      });
 
-      if (localNode) {
-        // 2. Pregătim noile date de metadata
-        const newMetadata = {
-          ...(localNode.metadata || {}),
-          rol: item.rol || localNode.rol || '',
-          department_rof: item.department_rof || item.reglementare || localNode.metadata?.department_rof || ''
-        };
+      if (localNodes.length > 0) {
+        for (const localNode of localNodes) {
+          // 2. Pregătim noile date de metadata
+          const newMetadata = {
+            ...(localNode.metadata || {}),
+            rol: item.rol || localNode.rol || '',
+            department_rof: item.department_rof || item.reglementare || localNode.metadata?.department_rof || ''
+          };
 
-        // 3. Facem UPDATE în Supabase
-        const { error } = await supabase
-          .from('organograms')
-          .update({ 
-            metadata: newMetadata,
-            rol: item.rol || localNode.rol || ''
-          })
-          .eq('id', localNode.id);
+          // 3. Determinăm tabelul CORECT
+          let tableName = (localNode.parent_id === null) ? 'institutii' : 'organograms';
 
-        if (!error) {
-          // 4. Actualizăm și local în graf ca să se vadă imediat
-          localNode.metadata = newMetadata;
-          localNode.rol = item.rol || localNode.rol || '';
-          updatedCount++;
-        } else {
-          console.error(`Eroare la salvarea nodului ${nodeName}:`, error.message);
+          // 4. Facem UPDATE în Supabase
+          const { error } = await supabase
+            .from(tableName)
+            .update({ 
+              metadata: newMetadata,
+              rol: item.rol || localNode.rol || ''
+            })
+            .eq('id', localNode.id);
+
+          if (!error) {
+            // 5. Actualizăm și local
+            localNode.metadata = newMetadata;
+            localNode.rol = item.rol || localNode.rol || '';
+            updatedCount++;
+          } else {
+            console.error(`Eroare DB la ${item.nume_nod}:`, error.message);
+          }
         }
       } else {
-        console.warn(`Nodul "${nodeName}" nu a fost găsit în organigramă.`);
-        notFoundCount++;
+        notFoundNames.push(item.nume_nod);
       }
     }
 
-    aiStatusText.value = `✅ Populare finalizată! ${updatedCount} noduri actualizate. ${notFoundCount > 0 ? `(${notFoundCount} negăsite)` : ''}`;
-    bulkJsonInput.value = ''; // Curățăm căsuța
-    alert(`Succes! ${updatedCount} noduri au fost populate cu atribuții.`);
+    aiStatusText.value = `✅ Populare finalizată! ${updatedCount} noduri actualizate.`;
+    bulkJsonInput.value = ''; 
+    
+    if (notFoundNames.length > 0) {
+      alert(`Succes! ${updatedCount} noduri actualizate.\n\nATENȚIE: Următoarele ${notFoundNames.length} noduri NU au fost găsite în baza de date:\n- ${notFoundNames.join('\n- ')}`);
+    } else {
+      alert(`Succes! ${updatedCount} noduri au fost populate cu atribuții.`);
+    }
 
   } catch (error) {
     console.error('Eroare Parsare JSON Masiv:', error);
