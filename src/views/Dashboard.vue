@@ -2630,11 +2630,14 @@ const injectBulkJson = async () => {
 
       if (localNodes.length > 0) {
         for (const localNode of localNodes) {
-          // 2. Pregătim noile date de metadata
+                    // 2. Pregătim noile date de metadata (Adăugăm toate câmpurile posibile)
           const newMetadata = {
             ...(localNode.metadata || {}),
             rol: item.rol || localNode.rol || '',
-            department_rof: item.department_rof || item.reglementare || localNode.metadata?.department_rof || ''
+            department_rof: item.department_rof || item.reglementare || localNode.metadata?.department_rof || '',
+            role_reglementare: item.role_reglementare || localNode.metadata?.role_reglementare || '',
+            role_baza_legala: item.role_baza_legala || localNode.metadata?.role_baza_legala || '',
+            role_cod_cor: item.role_cod_cor || localNode.metadata?.role_cod_cor || ''
           };
 
           // 3. Determinăm tabelul CORECT
