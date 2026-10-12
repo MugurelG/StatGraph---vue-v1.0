@@ -2637,8 +2637,8 @@ const injectBulkJson = async () => {
       if (localNodes.length > 0) {
         for (const localNode of localNodes) {
                             // 2. Pregătim noile date de metadata (Cheile corectate pentru baza de date)
-          const newMetadata = {
-            ...(localNode.metadata || {}),
+          let newMetadata = {
+                ...(localNode.metadata || {}),
             rol: item.rol || localNode.rol || '',
             rof: item.department_rof || item.reglementare || localNode.metadata?.rof || '',
             reglementare: item.role_reglementare || localNode.metadata?.reglementare || '',
