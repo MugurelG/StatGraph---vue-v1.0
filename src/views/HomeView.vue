@@ -204,7 +204,7 @@
       <div class="tri-bar"></div>
       <p class="mission-text">
         Când structurile puterii devin vizibile și înțelese, cetățenii pot cere mai mult,
-        pot participa mai inteligent și pot avea încredere informate în instituțiile care îi servesc.
+        pot participa mai inteligent și pot avea o încredere informată în instituțiile care îi servesc.
       </p>
       <a href="#" class="btn-primary" @click.prevent="goDashboard">Începe explorarea</a>
     </section>

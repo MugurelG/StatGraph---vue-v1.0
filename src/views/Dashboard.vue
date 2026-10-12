@@ -2581,6 +2581,10 @@ const injectBulkJson = async () => {
     return;
   }
 
+
+    window.__statgraphNodes = allNodesList.value;
+    window.__statgraphRootId = String(currentRootId.value);
+
   isAiLoading.value = true;
   aiStatusText.value = '🚀 Actualizez nodurile în baza de date...';
 
@@ -2615,6 +2619,7 @@ const injectBulkJson = async () => {
       }
       return false;
     };
+
 
     let updatedCount = 0;
     let notFoundNames = [];
@@ -2683,6 +2688,53 @@ const injectBulkJson = async () => {
     isAiLoading.value = false;
   }
 };
+
+// --- VERIFICARE ÎNCĂRCARE DATE (doar sub-arborele deschis) ---
+const verifyBulkLoad = () => {
+  const rootStr = String(currentRootId.value);
+  const nodeMap = new Map(allNodesList.value.map(n => [String(n.id), n]));
+
+  // un nod aparține sub-arborelui curent dacă urcând prin părinți ajungem la rădăcină
+  const isInTree = (node) => {
+    let id = String(node.id);
+    const visited = new Set();
+    while (id) {
+      if (id === rootStr) return true;
+      if (visited.has(id)) return false;
+      visited.add(id);
+      const n = nodeMap.get(id);
+      if (!n || !n.parent_id) return false;
+      id = String(n.parent_id);
+    }
+    return false;
+  };
+
+  const filled = [];
+  const empty = [];
+
+  allNodesList.value.forEach(n => {
+    if (!isInTree(n)) return;   // doar nodurile instituției deschise
+
+    const name = n.nume || n.node_name || 'Nod fără nume';
+    const hasRol = (n.rol && String(n.rol).trim() !== '') || (n.metadata?.rol && String(n.metadata.rol).trim() !== '');
+    const hasRef = (n.metadata?.rof && String(n.metadata.rof).trim() !== '') || (n.metadata?.reglementare && String(n.metadata.reglementare).trim() !== '');
+
+    if (hasRol || hasRef) filled.push(name);
+    else empty.push(name);
+  });
+
+  let msg = `VERIFICARE ÎNCĂRCARE DATE\n(sub-arborele deschis)\n\n`;
+  msg += `✅ Noduri cu date: ${filled.length}\n`;
+  msg += `⬜ Noduri FĂRĂ date: ${empty.length}\n`;
+  if (empty.length > 0) {
+    msg += `\nFără date:\n- ${empty.join('\n- ')}`;
+  }
+  alert(msg);
+};
+
+window.verifyBulkLoad = verifyBulkLoad;
+
+window.verifyBulkLoad = verifyBulkLoad;
 </script>
 
 <template src="./dashboard-template.html"></template>
