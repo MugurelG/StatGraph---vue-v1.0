@@ -2623,6 +2623,7 @@ const injectBulkJson = async () => {
 
     let updatedCount = 0;
     let notFoundNames = [];
+    let hrDone = [];
 
     for (const item of bulkData) {
       const jsonName = cleanName(item.nume_nod || item.nume);
@@ -2646,7 +2647,92 @@ const injectBulkJson = async () => {
           };
 
           // 3. Determinăm tabelul CORECT
-          let tableName = (localNode.parent_id === null) ? 'institutii' : 'organograms';
+          // ================= HR: date_joburi (rânduri de posturi) =================
+          if (Array.isArray(item.hr_rows)) {
+                      console.log('🎯 HR BLOC: nod=', item.nume_nod, '| hr_rows=', item.hr_rows.length);
+            // validare: functie este obligatorie (NOT NULL în DB)
+            const validRows = item.hr_rows.filter(r => r.functie && String(r.functie).trim() !== '');
+            const skipped = item.hr_rows.length - validRows.length;
+            if (skipped > 0) {
+              console.warn(`HR: ${skipped} rând(uri) ignorate — lipsă "functie" la "${item.nume_nod}"`);
+            }
+
+            // ștergem rândurile vechi (flux identic cu editarea din formular)
+            await supabase.from('date_joburi').delete().eq('organogram_node_id', localNode.id);
+
+            if (validRows.length > 0) {
+              // ID-uri pentru coloanele financiare, unice per rând
+              let finCounter = 0;
+              const hrInserts = validRows.map(row => ({
+                organogram_node_id: localNode.id,
+                functie: row.functie,
+                pozitii_ocupate: Number(row.ocupate) || 0,
+                pozitii_vacante: Number(row.vacante) || 0,
+                salariu_minim: null,
+                salariu_maxim: null,
+                statut: row.statut || 'Activ',
+                observatii: row.observatii || '',
+                fin_columns: (row.finColumns || []).map(c => ({
+                  id: 'fin_bulk_' + Date.now() + '_' + (++finCounter),
+                  name: c.name || 'Venit',
+                  type: c.type || 'valoare',
+                  value: c.value !== undefined && c.value !== null ? c.value : 0
+                }))
+              }));
+              const { error: hrErr } = await supabase.from('date_joburi').insert(hrInserts);
+              if (hrErr) {
+                console.error(`HR: eroare la "${item.nume_nod}":`, hrErr.message);
+              } else {
+                hrDone.push({ nume: item.nume_nod, randuri: hrInserts.length });
+              }
+            }
+          }
+
+          // ================= HR: metadata.hr_departament (departamente/birouri) =================
+          if (Array.isArray(item.hr_departament)) {
+            const validDeptRows = item.hr_departament.filter(r => r.functie && String(r.functie).trim() !== '');
+            newMetadata = {
+              ...newMetadata,
+              hr_departament: validDeptRows.map(row => ({
+                functie: row.functie,
+                total: Number(row.total) || 0,
+                ocupate: Number(row.ocupate) || 0,
+                vacante: Number(row.vacante) || 0,
+                observatii: row.observatii || '',
+                finColumns: (row.finColumns || []).map(c => ({
+                  id: 'fin_bulk_' + Date.now() + '_' + (++finColIdCounter),
+                  name: c.name || 'Venit',
+                  type: c.type || 'valoare',
+                  value: c.value !== undefined && c.value !== null ? c.value : 0
+                }))
+              }))
+            };
+            hrDone.push({ nume: item.nume_nod + ' (departament)', randuri: validDeptRows.length });
+          }
+
+          // ================= HR: metadata.role_fin_columns + role_statut (roluri) =================
+          if (Array.isArray(item.role_fin_columns) || item.role_statut) {
+            newMetadata = {
+              ...newMetadata,
+              role_statut: item.role_statut || localNode.metadata?.role_statut || 'Vacant',
+              role_fin_columns: (item.role_fin_columns || localNode.metadata?.role_fin_columns || []).map(c => ({
+                id: 'fin_bulk_' + Date.now() + '_' + (++finColIdCounter),
+                name: c.name || 'Venit',
+                type: c.type || 'valoare',
+                value: c.value !== undefined && c.value !== null ? c.value : 0
+              }))
+            };
+          }
+
+          // ================= Membri comisie =================
+          if (Array.isArray(item.committee_members)) {
+            newMetadata = {
+              ...newMetadata,
+              committee_members: item.committee_members
+            };
+          }
+
+          let tableName = (localNode.parent_id == null) ? 'institutii' : 'organograms';
 
           // 4. Facem UPDATE în Supabase
           const { error } = await supabase
@@ -2671,11 +2757,25 @@ const injectBulkJson = async () => {
       }
     }
 
-    aiStatusText.value = `✅ Populare finalizată! ${updatedCount} noduri actualizate.`;
+        const hrSummary = hrDone.length > 0
+      ? ` | Rânduri HR scrise: ${hrDone.map(h => `${h.nume} (${h.randuri})`).join(', ')}`
+      : '';
+
+    aiStatusText.value = `✅ Populare finalizată! ${updatedCount} noduri actualizate.${hrSummary}`;
     bulkJsonInput.value = ''; 
     
+    // actualizare locală: nodurile cu hr_rows primesc datele în memorie, ca panourile să le vadă fără F5
+    for (const item of bulkData) {
+      const localNode = allNodesList.value.find(n => cleanName(n.nume || n.node_name) === cleanName(item.nume_nod || item.nume));
+      if (localNode && item.hr_departament) localNode.metadata = { ...(localNode.metadata || {}), hr_departament: item.hr_departament };
+      if (localNode && item.role_statut) localNode.metadata = { ...(localNode.metadata || {}), role_statut: item.role_statut };
+      if (localNode && item.role_fin_columns) localNode.metadata = { ...(localNode.metadata || {}), role_fin_columns: item.role_fin_columns };
+      if (localNode && item.committee_members) localNode.metadata = { ...(localNode.metadata || {}), committee_members: item.committee_members };
+    }
+    
     if (notFoundNames.length > 0) {
-      alert(`Succes! ${updatedCount} noduri actualizate.\n\nATENȚIE: Următoarele ${notFoundNames.length} noduri NU au fost găsite în sub-arborele curent:\n- ${notFoundNames.join('\n- ')}`);
+    
+       alert(`Succes! ${updatedCount} noduri actualizate.\n\nATENȚIE: Următoarele ${notFoundNames.length} noduri NU au fost găsite în sub-arborele curent:\n- ${notFoundNames.join('\n- ')}`);
     } else {
       alert(`Succes! ${updatedCount} noduri au fost populate cu atribuții.`);
     }

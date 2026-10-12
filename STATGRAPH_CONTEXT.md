@@ -242,3 +242,33 @@ Nivel 3 (următor): populare HR din Stat de Funcții + contacte din surse primar
 
 15.6 Regulă de lucru (proprietar)
 Un singur pas per mesaj. Explicații scurte. Confirmare înainte de pasul următor.Livrări mari de cod → pe fragmente de ~200 linii.
+
+
+16. CONTRACT JSON POPULARE (final, validat pe DNSC + DLAF)
+16.1 Structura completă — toate câmpurile acceptate de injectBulkJson
+[ { "nume_nod": "Denumirea exactă a nodului din DB (cheie de potrivire, nu se scrie)",
+
+// --- TEXT (ca până acum) ---"rol": "rezumat atribuții...",            // → col. rol + metadata.rol"department_rof": "R.O.F. Cap. X",        // → metadata.rof (Inst/Dept/Birou/Comisie)"role_reglementare": "R.O.F. Art. X",     // → metadata.reglementare (Rol)"role_baza_legala": "...",                // → metadata.baza_legala (Rol)"role_cod_cor": "...",                    // → metadata.cod_cor (Rol, doar dacă apare în doc)// --- HR INSTITUȚIE (nod cu date personale centralizate) ---// → tabela date_joburi (delete + insert pe nodul respectiv)"hr_rows": [  { "functie": "Director",                // OBLIGATORIU (NOT NULL în DB)    "ocupate": 1, "vacante": 0,    "statut": "Activ",                    // opțional, default Activ    "observatii": "",    "finColumns": [                       // veniturile rândului      { "name": "Salariu de bază - brut", "type": "valoare", "value": 13724 }    ] }],// --- HR DEPARTAMENT/BIROU (posturi defalcate pe nod) ---// → metadata.hr_departament (păstrează restul metadata!)"hr_departament": [  { "functie": "Consilier", "total": 10, "ocupate": 8, "vacante": 2,    "observatii": "", "finColumns": [ ...same format... ] }],// --- HR ROL ---// → metadata.role_statut + metadata.role_fin_columns"role_statut": "Activ" | "Vacant","role_fin_columns": [ { "name": "...", "type": "valoare", "value": 9000 } ],// --- COMISIE ---"committee_members": [ { "nume": "", "rol_in_comisie": "", "functia_de_baza": "" } ]
+}]
+
+16.2 Reguli de CONȚINUT (extragerea din documente)
+UN RÂND = O VALOARE per venit. La intervale (min–max):
+scriem DOAR minimul, numit „Salariu minim de bază - brut"
+MAXIMUL SE IGNORĂ COMPLET (nu se scrie nicăieri — nici în observații)
+motiv: algoritmul de calcul ADUNĂ toate valorile din finColumns
+Veniturile = VALORI FIXE din document (nu procente) — proprietarul vrea sumele exacte
+funcție obligatorie: rândurile fără „functie" sunt arse (NOT NULL în date_joburi)
+Tabel centralizat (toate posturile pe rădăcină) → hr_rows pe nodul rădăcinăTabel defalcat → hr_rows/hr_departament pe fiecare nod cu posturile lui
+CUI/contacte: doar din surse primare (antet document oficial, e-licitatie), niciodată din memorie
+Cod COR: doar dacă apare în document
+16.3 Reguli de MATCHING & EXECUȚIE
+nume normalizat (fără diacritice, lowercase, trim); toate nodurile cu același nume primesc datele
+doar sub-arborele DESCHIS în Dashboard e căutat — instituția trebuie deschisă ca rădăcină
+hr_rows: DELETE + INSERT pe nod (zero duplicate); alte câmpuri: merge în metadata (păstrează restul)
+după bulk NU salva nodurile prin formular (suprascrie metadata!)
+verificare post-populare: butonul „🔍 Verificare încărcare date" din panoul Admin
+16.4 PROTOCOL CU ASISTENTUL (la fiecare instituție nouă)
+Proprietarul trimite: rezultat SQL (sub-arbore) + documentele (ROF, tabel salarizare, Stat de Funcții)
+Asistentul extrage și returnează JSON conform §16.1-16.2 — proprietarul confirmă deciziilede interpretare (ce e venit, ce e spor, ce se ignoră) ÎNAINTE de aplicare
+Proprietarul aplică + verifică cu butonul + panoul „D"
+Lecție tehnică veche, valabilă: funcții noi pentru template extern → window.expose
